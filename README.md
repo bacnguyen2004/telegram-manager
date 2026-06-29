@@ -4,6 +4,8 @@
 
 Monorepo **FastAPI + React** — quản lý tài khoản Telegram qua HTTP API và dashboard web. Backend dùng **Telethon**, có **session lock** an toàn khi nhiều request, **Docker Compose** để clone là chạy.
 
+**Tính năng nổi bật:** đăng nhập OTP/2FA/đăng ký trên một trang `/auth`, chat dialogs (đọc/gửi/reply/ảnh/xóa), đồng bộ trạng thái đã đọc với Telegram, light/dark theme.
+
 ```
 telegram-manager-api/
 ├── backend/     # FastAPI + Telethon (port 8001)
@@ -19,7 +21,7 @@ GitHub: https://github.com/bacnguyen2004/telegram-manager-api
 **Description:**
 
 ```
-FastAPI + React dashboard for Telegram account management via Telethon — sessions, groups, dialogs, messaging (send/reply/delete). Docker-ready.
+FastAPI + React dashboard for Telegram via Telethon — sessions, groups, dialogs, messaging, read-receipt sync. Docker-ready.
 ```
 
 **Topics:** `fastapi` `react` `telethon` `telegram` `typescript` `docker` `vite` `pytest`
@@ -30,9 +32,9 @@ FastAPI + React dashboard for Telegram account management via Telethon — sessi
 
 | Dashboard — API map | Dialogs — chat UI | Sessions |
 |---|---|---|
-| ![Dashboard](docs/screenshots/dashboard.svg) | ![Dialogs](docs/screenshots/dialogs.svg) | ![Sessions](docs/screenshots/sessions.svg) |
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Dialogs](docs/screenshots/dialogs.png) | ![Sessions](docs/screenshots/sessions.png) |
 
-> Thay bằng ảnh chụp thật: xem [docs/screenshots/README.md](docs/screenshots/README.md).
+> Ảnh chụp từ dashboard local — thay mới: xem [docs/screenshots/README.md](docs/screenshots/README.md).
 
 ---
 
@@ -59,11 +61,13 @@ docker compose up --build
 
 ### 3. Đăng nhập (chưa có session)
 
-Trong Swagger `/docs`:
+**Cách 1 — Dashboard (khuyến nghị):** http://localhost:5173/auth
 
-1. `POST /api/auth/send-code` — gửi OTP tới app Telegram
-2. `POST /api/auth/login` — nhập OTP → tạo file `.session`
-3. `GET /api/sessions` — xác nhận `total >= 1`
+1. Nhập số điện thoại → gửi OTP
+2. Nhập mã → tự chuyển 2FA / đăng ký profile / thành công
+3. Vào **Sessions** — xác nhận có file `.session`
+
+**Cách 2 — Swagger** `/docs`: `send-code` → `login` (hoặc `register`) → `GET /api/sessions`
 
 > Đăng nhập Telegram trên điện thoại **không** tự tạo session cho API.
 
@@ -81,7 +85,7 @@ npm install
 npm run dev
 ```
 
-Mở http://localhost:5173 → **Dialogs** → chọn phone → đọc/gửi/reply/xóa tin.
+Mở http://localhost:5173 → **Dialogs** → chọn phone → đọc/gửi/reply/ảnh/xóa tin. Cuộn hoặc bấm mũi tên xuống cuối để đánh dấu đã đọc (badge chưa đọc đồng bộ với Telegram).
 
 Proxy `/api` mặc định trỏ `http://127.0.0.1:8001`. Đổi port: tạo `frontend/.env.local` với `VITE_API_PROXY_TARGET=http://127.0.0.1:<port>`.
 
@@ -177,7 +181,7 @@ Tất cả service dùng helper `telethon_session()` (lock → connect → yield
 
 ---
 
-## API — 23 endpoint
+## API — 24 endpoint
 
 Response chuẩn: `{ "success": true|false, "data": ..., "error": null|"..." }`
 
@@ -221,8 +225,9 @@ Response chuẩn: `{ "success": true|false, "data": ..., "error": null|"..." }`
 
 | Method | Endpoint | Mô tả |
 |---|---|---|
-| GET | `/api/dialogs/{phone}` | Tất cả chat (private, bot, group, channel) |
+| GET | `/api/dialogs/{phone}` | Tất cả chat (private, bot, group, channel) + `read_inbox_max_id` |
 | GET | `/api/dialogs/{phone}/messages` | Đọc tin nhắn 1 chat (`?peer_id=&limit=`) |
+| POST | `/api/dialogs/{phone}/read` | Đánh dấu đã đọc (`peer_id`, `max_id?`) — Telethon `send_read_acknowledge` |
 | GET | `/api/dialogs/{phone}/messages/{message_id}/photo` | Thumbnail ảnh tin nhắn (`?peer_id=`) |
 | POST | `/api/messages/send` | Gửi tin text (`phone`, `peer_id`, `text`) |
 | POST | `/api/messages/reply` | Trả lời tin (`phone`, `peer_id`, `reply_to_msg_id`, `text`) |
@@ -252,19 +257,24 @@ app/
 
 | Route | Trang |
 |---|---|
-| `/` | Dashboard — bản đồ API |
+| `/` | Dashboard — bản đồ API + quick links |
 | `/sessions` | Quản lý session |
 | `/groups` | Join / leave / list |
-| `/dialogs` | Chat + gửi/reply/ảnh/xóa tin |
-| `/login`, `/register`, … | Auth flow |
+| `/dialogs` | Chat workspace — scroll tới tin đã đọc, jump xuống cuối, badge unread |
+| `/auth` | Đăng nhập thống nhất (OTP → 2FA / đăng ký / thành công) |
+| `/security` | Đổi 2FA, privacy |
 | `/health` | Health check |
+
+Các route cũ `/login`, `/register`, `/send-code` redirect về `/auth`.
 
 ---
 
 ## Roadmap
 
-- [x] Auth, sessions, groups, dialogs
+- [x] Auth (OTP, 2FA, `need_signup`, unified `/auth` UI)
+- [x] Sessions, groups, dialogs
 - [x] messages/send, reply, **send-media**, **delete**
-- [x] Session lock, React dashboard
+- [x] Dialog read sync (`read_inbox_max_id`, mark-read API, unread badges)
+- [x] Session lock, React dashboard, light/dark theme
 - [x] pytest, GitHub Actions CI, Docker Compose
 - [ ] Task system (bulk join/send)
