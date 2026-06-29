@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { DashboardPage } from './pages/DashboardPage'
+import { DialogsPage } from './pages/DialogsPage'
 import { GroupsPage } from './pages/GroupsPage'
 import { HealthPage } from './pages/HealthPage'
 import { LoginCodePage } from './pages/LoginCodePage'
@@ -18,6 +19,7 @@ function App() {
           <Route index element={<DashboardPage />} />
           <Route path="sessions" element={<SessionsPage />} />
           <Route path="groups" element={<GroupsPage />} />
+          <Route path="dialogs" element={<DialogsPage />} />
           <Route path="health" element={<HealthPage />} />
           <Route path="send-code" element={<SendCodePage />} />
           <Route path="login" element={<LoginPage />} />

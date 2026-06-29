@@ -1,8 +1,11 @@
 import type {
   ApiEnvelope,
   CheckSessionsData,
+  DialogMessagesData,
+  DialogsData,
   GroupActionData,
   GroupsData,
+  LeaveAllGroupsData,
   HealthData,
   LoginCodeData,
   LoginData,
@@ -23,16 +26,29 @@ async function request<T>(
   path: string,
   options?: RequestInit,
 ): Promise<ApiEnvelope<T>> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-    ...options,
-  })
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      headers: {
+        'Content-Type': 'application/json',
+        ...options?.headers,
+      },
+      ...options,
+    })
+  } catch (err) {
+    const hint =
+      'Kiểm tra backend đang chạy và Vite proxy (vite.config.ts → VITE_API_PROXY_TARGET).'
+    const msg = err instanceof Error ? err.message : 'Network error'
+    throw new Error(`${msg}. ${hint}`)
+  }
 
-  const body = (await response.json()) as ApiEnvelope<T>
-  return body
+  try {
+    return (await response.json()) as ApiEnvelope<T>
+  } catch {
+    throw new Error(
+      `Phản hồi không hợp lệ từ API (HTTP ${response.status}). Có thể proxy trỏ sai port backend.`,
+    )
+  }
 }
 
 export const api = {
@@ -133,9 +149,32 @@ export const api = {
     })
   },
 
+  leaveAllGroups(phone: string) {
+    return request<LeaveAllGroupsData>('/groups/leave-all', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    })
+  },
+
   listGroups(phone: string, limit = 1000) {
     return request<GroupsData>(
       `/groups/${encodeURIComponent(phone)}?limit=${limit}`,
+    )
+  },
+
+  listDialogs(phone: string, limit = 200) {
+    return request<DialogsData>(
+      `/dialogs/${encodeURIComponent(phone)}?limit=${limit}`,
+    )
+  },
+
+  getDialogMessages(phone: string, peerId: string, limit = 40) {
+    const params = new URLSearchParams({
+      peer_id: peerId,
+      limit: String(limit),
+    })
+    return request<DialogMessagesData>(
+      `/dialogs/${encodeURIComponent(phone)}/messages?${params}`,
     )
   },
 }

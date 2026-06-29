@@ -121,6 +121,13 @@ export interface GroupActionData {
   message: string
 }
 
+export interface LeaveAllGroupsData {
+  status: 'success' | 'error'
+  phone: string
+  left_count: number
+  message: string
+}
+
 export interface GroupItem {
   id: number
   title: string
@@ -136,5 +143,61 @@ export interface GroupsData {
   phone: string
   total: number
   groups: GroupItem[]
+  message: string
+}
+
+export interface DialogCounts {
+  private: number
+  bot: number
+  group: number
+  channel: number
+}
+
+export interface DialogItem {
+  id: string
+  entity_id: string
+  title: string
+  username: string
+  kind: string
+  is_private: boolean
+  is_group: boolean
+  is_channel: boolean
+  is_bot: boolean
+  link: string
+  unread_count: number
+  pinned: boolean
+  muted: boolean
+  date: string
+  last_message_id: string | number
+  last_message: string
+}
+
+export interface DialogsData {
+  status: 'success' | 'error'
+  phone: string
+  total: number
+  counts: DialogCounts
+  dialogs: DialogItem[]
+  message: string
+}
+
+export interface DialogMessageItem {
+  id: number
+  date: string
+  sender_id: string | number
+  sender_name: string
+  outgoing: boolean
+  content_type: string
+  has_media: boolean
+  text: string
+}
+
+export interface DialogMessagesData {
+  status: 'success' | 'error'
+  phone: string
+  peer_id: string
+  title: string
+  total: number
+  messages: DialogMessageItem[]
   message: string
 }

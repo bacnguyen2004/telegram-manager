@@ -830,6 +830,231 @@ a {
   margin-bottom: 0;
 }
 
+.dialogs-stats {
+  margin-bottom: 20px;
+}
+
+.dialogs-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.dialogs-list-panel,
+.dialogs-messages-panel {
+  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dialogs-list-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.dialogs-list-head h2 {
+  margin: 0;
+  font-size: 16px;
+  color: var(--text-strong);
+}
+
+.dialogs-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.dialogs-search {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-strong);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+
+.dialogs-search:focus {
+  border-color: var(--accent);
+}
+
+.dialogs-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dialogs-filter-btn {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dialogs-filter-btn--active {
+  background: var(--accent-soft);
+  border-color: rgba(42, 171, 238, 0.4);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.dialogs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  max-height: 440px;
+}
+
+.dialog-item {
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.dialog-item:hover {
+  background: var(--bg-hover);
+}
+
+.dialog-item--active {
+  background: var(--accent-soft);
+}
+
+.dialog-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dialog-item-title {
+  font-weight: 600;
+  color: var(--text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-unread {
+  flex-shrink: 0;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+}
+
+.dialog-item-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.dialog-preview {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dialog-date {
+  margin: 4px 0 0;
+  font-size: 11px;
+}
+
+.dialogs-empty {
+  padding: 24px 0;
+  text-align: center;
+}
+
+.messages-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+  max-height: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.message-row {
+  display: flex;
+}
+
+.message-row--out {
+  justify-content: flex-end;
+}
+
+.message-bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.message-row--out .message-bubble {
+  background: rgba(42, 171, 238, 0.12);
+  border-color: rgba(42, 171, 238, 0.25);
+}
+
+.message-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.message-sender {
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+.message-text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message-type {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -876,5 +1101,17 @@ a {
 
   .page-header {
     flex-direction: column;
+  }
+
+  .dialogs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .dialogs-list {
+    max-height: 320px;
+  }
+
+  .messages-list {
+    max-height: 360px;
   }
 }

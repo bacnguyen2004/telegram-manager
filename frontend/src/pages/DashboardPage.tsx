@@ -22,7 +22,15 @@ const apiMap = [
     items: [
       { method: 'POST', path: '/api/groups/join', page: '/groups' },
       { method: 'POST', path: '/api/groups/leave', page: '/groups' },
+      { method: 'POST', path: '/api/groups/leave-all', page: '/groups' },
       { method: 'GET', path: '/api/groups/{phone}', page: '/groups' },
+    ],
+  },
+  {
+    group: 'Dialogs',
+    items: [
+      { method: 'GET', path: '/api/dialogs/{phone}', page: '/dialogs' },
+      { method: 'GET', path: '/api/dialogs/{phone}/messages', page: '/dialogs' },
     ],
   },
   {
@@ -65,7 +73,7 @@ export function DashboardPage() {
       <header className="page-header">
         <div>
           <h1>Tổng quan</h1>
-          <p className="page-desc">Dashboard — 15 API endpoint</p>
+          <p className="page-desc">Dashboard — 18 API endpoint</p>
         </div>
       </header>
 
@@ -90,7 +98,7 @@ export function DashboardPage() {
         </article>
         <article className="stat-card">
           <p className="stat-label">API endpoints</p>
-          <p className="stat-value">15</p>
+          <p className="stat-value">18</p>
         </article>
       </section>
 
@@ -99,6 +107,7 @@ export function DashboardPage() {
         <div className="quick-actions">
           <Link to="/sessions" className="btn btn--ghost">Sessions</Link>
           <Link to="/groups" className="btn btn--ghost">Groups</Link>
+          <Link to="/dialogs" className="btn btn--ghost">Dialogs</Link>
           <Link to="/login" className="btn btn--ghost">Đăng nhập</Link>
           <Link to="/register" className="btn btn--ghost">Đăng ký</Link>
           <Link to="/send-code" className="btn btn--ghost">Gửi OTP</Link>

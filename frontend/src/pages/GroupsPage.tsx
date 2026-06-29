@@ -5,7 +5,7 @@ import { PhoneSelect } from '../components/PhoneSelect'
 import { StatusBadge } from '../components/StatusBadge'
 import type { GroupItem } from '../types/api'
 
-type Tab = 'join' | 'leave' | 'list'
+type Tab = 'list' | 'join' | 'leave' | 'leave-all'
 
 export function GroupsPage() {
   const [tab, setTab] = useState<Tab>('list')
@@ -16,6 +16,7 @@ export function GroupsPage() {
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [info, setInfo] = useState('')
+  const [leaveAllCount, setLeaveAllCount] = useState<number | null>(null)
 
   function resetAlerts() {
     setError('')
@@ -71,6 +72,37 @@ export function GroupsPage() {
     }
   }
 
+  async function handleLeaveAll(e: React.FormEvent) {
+    e.preventDefault()
+    const confirmed = window.confirm(
+      `Rời TẤT CẢ nhóm/channel của ${phone}?\n\nHành động này không hoàn tác được.`,
+    )
+    if (!confirmed) return
+
+    setLoading(true)
+    resetAlerts()
+    setLeaveAllCount(null)
+    try {
+      const res = await api.leaveAllGroups(phone)
+      if (!res.success || !res.data) {
+        setError(res.error ?? 'Leave all thất bại')
+        return
+      }
+      if (res.data.status === 'error') {
+        setError(res.data.message)
+        return
+      }
+      setLeaveAllCount(res.data.left_count)
+      setSuccess(res.data.message)
+      setGroups([])
+      setTab('leave-all')
+    } catch {
+      setError('Không kết nối được API.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function handleList(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -105,17 +137,24 @@ export function GroupsPage() {
       </header>
 
       <div className="tab-bar">
-        {(['list', 'join', 'leave'] as Tab[]).map((item) => (
+        {(
+          [
+            { id: 'list' as Tab, label: 'Danh sách' },
+            { id: 'join' as Tab, label: 'Join' },
+            { id: 'leave' as Tab, label: 'Leave' },
+            { id: 'leave-all' as Tab, label: 'Leave all' },
+          ]
+        ).map((item) => (
           <button
-            key={item}
+            key={item.id}
             type="button"
-            className={`tab-btn${tab === item ? ' tab-btn--active' : ''}`}
+            className={`tab-btn${tab === item.id ? ' tab-btn--active' : ''}`}
             onClick={() => {
-              setTab(item)
+              setTab(item.id)
               resetAlerts()
             }}
           >
-            {item === 'list' ? 'Danh sách' : item === 'join' ? 'Join' : 'Leave'}
+            {item.label}
           </button>
         ))}
       </div>
@@ -172,6 +211,34 @@ export function GroupsPage() {
         </section>
       )}
 
+      {tab === 'leave-all' && (
+        <section className="panel" style={{ maxWidth: 520 }}>
+          <h2>
+            <code>POST /api/groups/leave-all</code>
+          </h2>
+          <div className="hint-box" style={{ marginBottom: 16 }}>
+            <p>Rời tất cả group và channel của một tài khoản. Có thể mất vài phút nếu join nhiều nhóm.</p>
+          </div>
+          <form onSubmit={(e) => void handleLeaveAll(e)}>
+            <PhoneSelect value={phone} onChange={setPhone} allowManual={false} />
+            <button
+              type="submit"
+              className="btn btn--danger btn--block"
+              disabled={loading || !phone}
+            >
+              {loading ? 'Đang rời từng nhóm… (có thể lâu)' : 'Leave tất cả nhóm'}
+            </button>
+          </form>
+          {leaveAllCount !== null && (
+            <div className="code-result" style={{ marginTop: 20 }}>
+              <p className="code-result-label">Đã rời</p>
+              <p className="code-result-value">{leaveAllCount}</p>
+              <p className="muted">nhóm / channel</p>
+            </div>
+          )}
+        </section>
+      )}
+
       {tab === 'list' && (
         <>
           <section className="panel">
@@ -190,7 +257,20 @@ export function GroupsPage() {
             <section className="panel">
               <div className="panel-head">
                 <h2>Nhóm đã join</h2>
-                <span className="panel-meta">{groups.length} mục</span>
+                <div className="header-actions">
+                  <span className="panel-meta">{groups.length} mục</span>
+                  <button
+                    type="button"
+                    className="btn btn--sm btn--danger"
+                    disabled={loading || !phone}
+                    onClick={() => {
+                      setTab('leave-all')
+                      resetAlerts()
+                    }}
+                  >
+                    Leave all →
+                  </button>
+                </div>
               </div>
               <div className="table-wrap">
                 <table className="data-table">

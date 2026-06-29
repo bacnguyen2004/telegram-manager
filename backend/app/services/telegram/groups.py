@@ -173,6 +173,69 @@ class TelegramGroupService:
         finally:
             await client.disconnect()
 
+    async def leave_all_groups(self, phone: str) -> dict:
+        phone = phone.strip()
+
+        if not phone:
+            return self._leave_all_result("error", phone, 0, "Thieu phone")
+
+        try:
+            settings.validate_telegram_config()
+        except ValueError as exc:
+            return self._leave_all_result("error", phone, 0, str(exc))
+
+        session_file = self._session_file(phone)
+        if not session_file.exists():
+            return self._leave_all_result(
+                "error",
+                phone,
+                0,
+                f"Khong tim thay file session: {session_file}",
+            )
+
+        session_base = self.session_dir / phone
+        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
+        await client.connect()
+        try:
+            if not await client.is_user_authorized():
+                return self._leave_all_result(
+                    "error",
+                    phone,
+                    0,
+                    "Session chua dang nhap hoac da het han",
+                )
+
+            dialogs = await client.get_dialogs()
+            left_count = 0
+            for dialog in dialogs:
+                if not (dialog.is_group or dialog.is_channel):
+                    continue
+                try:
+                    await client(LeaveChannelRequest(dialog.entity))
+                    left_count += 1
+                except FloodWaitError:
+                    raise
+                except Exception:
+                    continue
+
+            return self._leave_all_result(
+                "success",
+                phone,
+                left_count,
+                f"Da roi {left_count} nhom/channel",
+            )
+        except FloodWaitError as exc:
+            return self._leave_all_result(
+                "error",
+                phone,
+                0,
+                f"Flood wait {exc.seconds}s",
+            )
+        except Exception as exc:
+            return self._leave_all_result("error", phone, 0, str(exc))
+        finally:
+            await client.disconnect()
+
     async def list_groups(self, phone: str, limit: int = 1000) -> dict:
         phone = phone.strip()
         limit = max(1, min(int(limit or 1000), 5000))
@@ -269,6 +332,20 @@ class TelegramGroupService:
 
     def _session_file(self, phone: str) -> Path:
         return (self.session_dir / phone).with_suffix(".session")
+
+    @staticmethod
+    def _leave_all_result(
+        status: str,
+        phone: str,
+        left_count: int,
+        message: str,
+    ) -> dict:
+        return {
+            "status": status,
+            "phone": phone,
+            "left_count": left_count,
+            "message": message,
+        }
 
     @staticmethod
     def _action_result(

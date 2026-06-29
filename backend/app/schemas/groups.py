@@ -22,6 +22,17 @@ class LeaveGroupRequest(BaseModel):
     )
 
 
+class LeaveAllGroupsRequest(BaseModel):
+    phone: str = Field(..., examples=["+84901234567"])
+
+
+class LeaveAllGroupsData(BaseModel):
+    status: Literal["success", "error"]
+    phone: str
+    left_count: int
+    message: str
+
+
 class GroupActionData(BaseModel):
     status: Literal["success", "info", "error"]
     phone: str

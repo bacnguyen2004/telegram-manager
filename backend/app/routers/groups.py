@@ -5,6 +5,8 @@ from ..schemas.groups import (
     GroupActionData,
     GroupsData,
     JoinGroupRequest,
+    LeaveAllGroupsData,
+    LeaveAllGroupsRequest,
     LeaveGroupRequest,
 )
 from ..services.telegram.groups import telegram_group_service
@@ -33,6 +35,13 @@ async def leave_group(payload: LeaveGroupRequest) -> dict:
         payload.group_link,
     )
     data = GroupActionData(**result)
+    return success_response(data.model_dump())
+
+
+@router.post("/leave-all", response_model=ApiEnvelope[LeaveAllGroupsData])
+async def leave_all_groups(payload: LeaveAllGroupsRequest) -> dict:
+    result = await telegram_group_service.leave_all_groups(payload.phone)
+    data = LeaveAllGroupsData(**result)
     return success_response(data.model_dump())
 
 

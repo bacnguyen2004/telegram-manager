@@ -5,6 +5,7 @@ const navItems = [
   { to: '/', label: 'Tổng quan', icon: '▣', end: true },
   { to: '/sessions', label: 'Sessions', icon: '◉', end: false },
   { to: '/groups', label: 'Groups', icon: '◎', end: false },
+  { to: '/dialogs', label: 'Dialogs', icon: '☰', end: false },
   { to: '/health', label: 'Health', icon: '♥', end: false },
   { to: '/send-code', label: 'Gửi OTP', icon: '✉', end: false },
   { to: '/login', label: 'Đăng nhập', icon: '→', end: false },
