@@ -1,9 +1,11 @@
-type StatusKind = 'active' | 'unauthorized' | 'error' | 'success' | 'info' | 'default'
+type StatusKind = 'active' | 'unauthorized' | 'error' | 'success' | 'info' | 'warn' | 'default'
 
 const statusMap: Record<string, StatusKind> = {
   active: 'active',
   success: 'success',
+  ok: 'success',
   unauthorized: 'unauthorized',
+  degraded: 'warn',
   error: 'error',
   info: 'info',
 }

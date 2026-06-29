@@ -16,6 +16,8 @@ from .sessions import (
     CheckSessionItem,
     CheckSessionsData,
     CheckSessionsRequest,
+    DeleteSessionData,
+    SessionDetailData,
     SessionMeData,
     SessionsData,
 )
@@ -38,4 +40,6 @@ __all__ = [
     "CheckSessionItem",
     "CheckSessionsData",
     "SessionMeData",
+    "SessionDetailData",
+    "DeleteSessionData",
 ]

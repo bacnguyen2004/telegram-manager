@@ -2,7 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
 import { StatusBadge } from '../components/StatusBadge'
-import type { CheckSessionItem, SessionMeData } from '../types/api'
+import type { CheckSessionItem, SessionDetailData, SessionMeData } from '../types/api'
+import { formatBytes, formatDate } from '../utils/format'
+
+function calcStats(results: CheckSessionItem[]) {
+  return {
+    active: results.filter((item) => item.status === 'active').length,
+    unauthorized: results.filter((item) => item.status === 'unauthorized').length,
+    error: results.filter((item) => item.status === 'error').length,
+  }
+}
 
 export function SessionsPage() {
   const [sessions, setSessions] = useState<string[]>([])
@@ -11,10 +20,14 @@ export function SessionsPage() {
   const [stats, setStats] = useState({ active: 0, unauthorized: 0, error: 0 })
   const [loading, setLoading] = useState(true)
   const [checking, setChecking] = useState(false)
+  const [checkingPhone, setCheckingPhone] = useState<string | null>(null)
+  const [deletingPhone, setDeletingPhone] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
+  const [detailData, setDetailData] = useState<SessionDetailData | null>(null)
   const [meData, setMeData] = useState<SessionMeData | null>(null)
-  const [meLoading, setMeLoading] = useState(false)
+  const [modalLoading, setModalLoading] = useState(false)
 
   const loadSessions = useCallback(async () => {
     setLoading(true)
@@ -41,6 +54,7 @@ export function SessionsPage() {
   async function handleCheckAll() {
     setChecking(true)
     setError('')
+    setSuccess('')
     try {
       const res = await api.checkSessions()
       if (!res.success || !res.data) {
@@ -60,13 +74,58 @@ export function SessionsPage() {
     }
   }
 
-  async function handleViewMe(phone: string) {
-    setSelectedPhone(phone)
-    setMeData(null)
-    setMeLoading(true)
+  async function handleCheckOne(phone: string) {
+    setCheckingPhone(phone)
+    setError('')
     try {
-      const res = await api.getSessionMe(phone)
+      const res = await api.checkSessions([phone])
       if (!res.success || !res.data) {
+        setError(res.error ?? 'Kiểm tra session thất bại')
+        return
+      }
+      const item = res.data.sessions[0]
+      if (!item) return
+      setCheckResults((prev) => {
+        const next = [...prev.filter((row) => row.phone !== phone), item]
+        setStats(calcStats(next))
+        return next
+      })
+    } catch {
+      setError('Không kết nối được API khi kiểm tra session.')
+    } finally {
+      setCheckingPhone(null)
+    }
+  }
+
+  async function handleViewDetail(phone: string) {
+    setSelectedPhone(phone)
+    setDetailData(null)
+    setMeData(null)
+    setModalLoading(true)
+    try {
+      const [detailRes, meRes] = await Promise.all([
+        api.getSession(phone),
+        api.getSessionMe(phone),
+      ])
+
+      if (detailRes.success && detailRes.data) {
+        setDetailData(detailRes.data)
+      } else {
+        setDetailData({
+          status: 'not_found',
+          phone,
+          exists: false,
+          session_file: '',
+          size_bytes: null,
+          modified_at: null,
+          has_journal: false,
+          message: detailRes.error ?? 'Không lấy được thông tin file',
+        })
+      }
+
+      if (meRes.success && meRes.data) {
+        setMeData(meRes.data)
+      } else {
         setMeData({
           status: 'error',
           phone,
@@ -74,28 +133,53 @@ export function SessionsPage() {
           first_name: null,
           last_name: null,
           username: null,
-          message: res.error ?? 'Không lấy được thông tin',
+          message: meRes.error ?? 'Không lấy được thông tin tài khoản',
         })
+      }
+    } catch {
+      setError('Lỗi kết nối API khi tải chi tiết.')
+    } finally {
+      setModalLoading(false)
+    }
+  }
+
+  async function handleDelete(phone: string) {
+    const confirmed = window.confirm(
+      `Xóa session ${phone}?\n\nFile .session và pending_auth sẽ bị xóa vĩnh viễn.`,
+    )
+    if (!confirmed) return
+
+    setDeletingPhone(phone)
+    setError('')
+    setSuccess('')
+    try {
+      const res = await api.deleteSession(phone)
+      if (!res.success || !res.data) {
+        setError(res.error ?? 'Xóa session thất bại')
         return
       }
-      setMeData(res.data)
+      if (res.data.status === 'error') {
+        setError(res.data.message)
+        return
+      }
+
+      setSuccess(res.data.message)
+      setSessions((prev) => prev.filter((item) => item !== phone))
+      setTotal((prev) => Math.max(0, prev - 1))
+      setCheckResults((prev) => prev.filter((item) => item.phone !== phone))
+      if (selectedPhone === phone) {
+        closeModal()
+      }
     } catch {
-      setMeData({
-        status: 'error',
-        phone,
-        me_id: null,
-        first_name: null,
-        last_name: null,
-        username: null,
-        message: 'Lỗi kết nối API',
-      })
+      setError('Không kết nối được API khi xóa session.')
     } finally {
-      setMeLoading(false)
+      setDeletingPhone(null)
     }
   }
 
   function closeModal() {
     setSelectedPhone(null)
+    setDetailData(null)
     setMeData(null)
   }
 
@@ -126,6 +210,7 @@ export function SessionsPage() {
       </header>
 
       <Alert type="error" message={error} />
+      <Alert type="success" message={success} />
 
       <section className="stats-grid">
         <article className="stat-card">
@@ -158,7 +243,7 @@ export function SessionsPage() {
           <div className="empty-state">
             <p>Chưa có session nào.</p>
             <p>
-              Vào <strong>Đăng nhập mới</strong> để tạo file <code>.session</code>.
+              Vào <strong>Đăng nhập</strong> để tạo file <code>.session</code>.
             </p>
           </div>
         ) : (
@@ -175,6 +260,8 @@ export function SessionsPage() {
               <tbody>
                 {sessions.map((phone) => {
                   const checked = resultByPhone.get(phone)
+                  const isDeleting = deletingPhone === phone
+                  const isChecking = checkingPhone === phone
                   return (
                     <tr key={phone}>
                       <td>
@@ -192,9 +279,25 @@ export function SessionsPage() {
                         <button
                           type="button"
                           className="btn btn--sm btn--ghost"
-                          onClick={() => void handleViewMe(phone)}
+                          disabled={isChecking}
+                          onClick={() => void handleCheckOne(phone)}
+                        >
+                          {isChecking ? '…' : 'Check'}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--ghost"
+                          onClick={() => void handleViewDetail(phone)}
                         >
                           Chi tiết
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--sm btn--danger"
+                          disabled={isDeleting}
+                          onClick={() => void handleDelete(phone)}
+                        >
+                          {isDeleting ? 'Đang xóa…' : 'Xóa'}
                         </button>
                       </td>
                     </tr>
@@ -208,7 +311,7 @@ export function SessionsPage() {
 
       {selectedPhone && (
         <div className="modal-backdrop" onClick={closeModal}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>{selectedPhone}</h3>
               <button type="button" className="btn btn--icon" onClick={closeModal}>
@@ -216,34 +319,78 @@ export function SessionsPage() {
               </button>
             </div>
             <div className="modal-body">
-              {meLoading ? (
-                <p className="muted">Đang tải thông tin tài khoản…</p>
-              ) : meData ? (
+              {modalLoading ? (
+                <p className="muted">Đang tải…</p>
+              ) : (
                 <>
-                  <div className="detail-row">
-                    <span>Trạng thái</span>
-                    <StatusBadge status={meData.status} />
-                  </div>
-                  <div className="detail-row">
-                    <span>Telegram ID</span>
-                    <strong>{meData.me_id ?? '—'}</strong>
-                  </div>
-                  <div className="detail-row">
-                    <span>Họ tên</span>
-                    <strong>
-                      {[meData.first_name, meData.last_name].filter(Boolean).join(' ') || '—'}
-                    </strong>
-                  </div>
-                  <div className="detail-row">
-                    <span>Username</span>
-                    <strong>{meData.username ? `@${meData.username}` : '—'}</strong>
-                  </div>
-                  {meData.message && (
-                    <p className="detail-message">{meData.message}</p>
+                  <h4 className="modal-section-title">File session</h4>
+                  {detailData && (
+                    <>
+                      <div className="detail-row">
+                        <span>Tồn tại</span>
+                        <strong>{detailData.exists ? 'Có' : 'Không'}</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>Kích thước</span>
+                        <strong>{formatBytes(detailData.size_bytes)}</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>Sửa lần cuối</span>
+                        <strong>{formatDate(detailData.modified_at)}</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>Journal file</span>
+                        <strong>{detailData.has_journal ? 'Có' : 'Không'}</strong>
+                      </div>
+                      {detailData.session_file && (
+                        <p className="detail-message">
+                          <code className="session-path">{detailData.session_file}</code>
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  <h4 className="modal-section-title">Tài khoản Telegram</h4>
+                  {meData && (
+                    <>
+                      <div className="detail-row">
+                        <span>Trạng thái</span>
+                        <StatusBadge status={meData.status} />
+                      </div>
+                      <div className="detail-row">
+                        <span>Telegram ID</span>
+                        <strong>{meData.me_id ?? '—'}</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>Họ tên</span>
+                        <strong>
+                          {[meData.first_name, meData.last_name].filter(Boolean).join(' ') || '—'}
+                        </strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>Username</span>
+                        <strong>{meData.username ? `@${meData.username}` : '—'}</strong>
+                      </div>
+                      {meData.message && (
+                        <p className="detail-message">{meData.message}</p>
+                      )}
+                    </>
                   )}
                 </>
-              ) : null}
+              )}
             </div>
+            {selectedPhone && !modalLoading && (
+              <div className="modal-foot">
+                <button
+                  type="button"
+                  className="btn btn--danger"
+                  disabled={deletingPhone === selectedPhone}
+                  onClick={() => void handleDelete(selectedPhone)}
+                >
+                  {deletingPhone === selectedPhone ? 'Đang xóa…' : 'Xóa session'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

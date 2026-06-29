@@ -40,3 +40,22 @@ class SessionMeData(BaseModel):
     last_name: str | None = None
     username: str | None = None
     message: str = ""
+
+
+class SessionDetailData(BaseModel):
+    status: Literal["success", "not_found"]
+    phone: str
+    exists: bool
+    session_file: str
+    size_bytes: int | None = None
+    modified_at: str | None = None
+    has_journal: bool = False
+    message: str = ""
+
+
+class DeleteSessionData(BaseModel):
+    status: Literal["success", "error"]
+    phone: str
+    deleted_files: list[str] = []
+    pending_auth_cleared: bool = False
+    message: str = ""
