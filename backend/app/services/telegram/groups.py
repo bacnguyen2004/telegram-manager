@@ -1,6 +1,5 @@
 from pathlib import Path
 
-from telethon import TelegramClient
 from telethon.errors import (
     ChannelsTooMuchError,
     FloodWaitError,
@@ -13,6 +12,7 @@ from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelReque
 from telethon.tl.functions.messages import ImportChatInviteRequest
 
 from ...config import settings
+from .client import telethon_session
 
 
 class TelegramGroupService:
@@ -52,33 +52,33 @@ class TelegramGroupService:
 
         _ = captcha_enabled, captcha_timeout  # captcha solver — phase sau
 
-        session_base = self.session_dir / phone
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._action_result(
+                        "error",
+                        phone,
+                        group_link,
+                        "Session chua dang nhap hoac da het han",
+                    )
+
+                if "+" in group_link:
+                    invite_code = group_link.split("+", 1)[1].split("?")[0].strip("/")
+                    await client(ImportChatInviteRequest(invite_code))
+                elif "t.me/" in group_link:
+                    group_name = group_link.rstrip("/").split("/")[-1]
+                    await client(JoinChannelRequest(group_name))
+                else:
+                    await client(JoinChannelRequest(group_link))
+
                 return self._action_result(
-                    "error",
+                    "success",
                     phone,
                     group_link,
-                    "Session chua dang nhap hoac da het han",
+                    "Tham gia nhom thanh cong",
                 )
-
-            if "+" in group_link:
-                invite_code = group_link.split("+", 1)[1].split("?")[0].strip("/")
-                await client(ImportChatInviteRequest(invite_code))
-            elif "t.me/" in group_link:
-                group_name = group_link.rstrip("/").split("/")[-1]
-                await client(JoinChannelRequest(group_name))
-            else:
-                await client(JoinChannelRequest(group_link))
-
-            return self._action_result(
-                "success",
-                phone,
-                group_link,
-                "Tham gia nhom thanh cong",
-            )
         except UserAlreadyParticipantError:
             return self._action_result(
                 "info",
@@ -108,8 +108,6 @@ class TelegramGroupService:
             )
         except Exception as exc:
             return self._action_result("error", phone, group_link, str(exc))
-        finally:
-            await client.disconnect()
 
     async def leave_group(self, phone: str, group_link: str) -> dict:
         phone = phone.strip()
@@ -141,26 +139,26 @@ class TelegramGroupService:
         if isinstance(group_ref, str) and group_ref.isdigit():
             group_ref = int(group_ref)
 
-        session_base = self.session_dir / phone
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._action_result(
+                        "error",
+                        phone,
+                        group_link,
+                        "Session chua dang nhap hoac da het han",
+                    )
+
+                peer = await client.get_entity(group_ref)
+                await client(LeaveChannelRequest(peer))
                 return self._action_result(
-                    "error",
+                    "success",
                     phone,
                     group_link,
-                    "Session chua dang nhap hoac da het han",
+                    "Da roi nhom",
                 )
-
-            peer = await client.get_entity(group_ref)
-            await client(LeaveChannelRequest(peer))
-            return self._action_result(
-                "success",
-                phone,
-                group_link,
-                "Da roi nhom",
-            )
         except FloodWaitError as exc:
             return self._action_result(
                 "error",
@@ -170,8 +168,6 @@ class TelegramGroupService:
             )
         except Exception as exc:
             return self._action_result("error", phone, group_link, str(exc))
-        finally:
-            await client.disconnect()
 
     async def leave_all_groups(self, phone: str) -> dict:
         phone = phone.strip()
@@ -193,37 +189,37 @@ class TelegramGroupService:
                 f"Khong tim thay file session: {session_file}",
             )
 
-        session_base = self.session_dir / phone
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._leave_all_result(
+                        "error",
+                        phone,
+                        0,
+                        "Session chua dang nhap hoac da het han",
+                    )
+
+                dialogs = await client.get_dialogs()
+                left_count = 0
+                for dialog in dialogs:
+                    if not (dialog.is_group or dialog.is_channel):
+                        continue
+                    try:
+                        await client(LeaveChannelRequest(dialog.entity))
+                        left_count += 1
+                    except FloodWaitError:
+                        raise
+                    except Exception:
+                        continue
+
                 return self._leave_all_result(
-                    "error",
+                    "success",
                     phone,
-                    0,
-                    "Session chua dang nhap hoac da het han",
+                    left_count,
+                    f"Da roi {left_count} nhom/channel",
                 )
-
-            dialogs = await client.get_dialogs()
-            left_count = 0
-            for dialog in dialogs:
-                if not (dialog.is_group or dialog.is_channel):
-                    continue
-                try:
-                    await client(LeaveChannelRequest(dialog.entity))
-                    left_count += 1
-                except FloodWaitError:
-                    raise
-                except Exception:
-                    continue
-
-            return self._leave_all_result(
-                "success",
-                phone,
-                left_count,
-                f"Da roi {left_count} nhom/channel",
-            )
         except FloodWaitError as exc:
             return self._leave_all_result(
                 "error",
@@ -233,8 +229,6 @@ class TelegramGroupService:
             )
         except Exception as exc:
             return self._leave_all_result("error", phone, 0, str(exc))
-        finally:
-            await client.disconnect()
 
     async def list_groups(self, phone: str, limit: int = 1000) -> dict:
         phone = phone.strip()
@@ -270,47 +264,47 @@ class TelegramGroupService:
                 "message": f"Khong tim thay file session: {session_file}",
             }
 
-        session_base = self.session_dir / phone
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
-                return {
-                    "status": "error",
-                    "phone": phone,
-                    "total": 0,
-                    "groups": [],
-                    "message": "Session chua dang nhap hoac da het han",
-                }
-
-            dialogs = await client.get_dialogs(limit=limit)
-            groups: list[dict] = []
-            for dialog in dialogs:
-                if not (dialog.is_group or dialog.is_channel):
-                    continue
-                entity = dialog.entity
-                username = getattr(entity, "username", None) or ""
-                is_channel = dialog.is_channel and not dialog.is_group
-                groups.append(
-                    {
-                        "id": entity.id,
-                        "title": dialog.name or "",
-                        "username": username,
-                        "link": f"https://t.me/{username}" if username else "",
-                        "members_count": getattr(entity, "participants_count", None) or 0,
-                        "is_channel": is_channel,
-                        "type": "Channel" if is_channel else "Group",
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return {
+                        "status": "error",
+                        "phone": phone,
+                        "total": 0,
+                        "groups": [],
+                        "message": "Session chua dang nhap hoac da het han",
                     }
-                )
 
-            groups.sort(key=lambda item: (item.get("title") or "").lower())
-            return {
-                "status": "success",
-                "phone": phone,
-                "total": len(groups),
-                "groups": groups,
-                "message": "OK",
-            }
+                dialogs = await client.get_dialogs(limit=limit)
+                groups: list[dict] = []
+                for dialog in dialogs:
+                    if not (dialog.is_group or dialog.is_channel):
+                        continue
+                    entity = dialog.entity
+                    username = getattr(entity, "username", None) or ""
+                    is_channel = dialog.is_channel and not dialog.is_group
+                    groups.append(
+                        {
+                            "id": entity.id,
+                            "title": dialog.name or "",
+                            "username": username,
+                            "link": f"https://t.me/{username}" if username else "",
+                            "members_count": getattr(entity, "participants_count", None) or 0,
+                            "is_channel": is_channel,
+                            "type": "Channel" if is_channel else "Group",
+                        }
+                    )
+
+                groups.sort(key=lambda item: (item.get("title") or "").lower())
+                return {
+                    "status": "success",
+                    "phone": phone,
+                    "total": len(groups),
+                    "groups": groups,
+                    "message": "OK",
+                }
         except FloodWaitError as exc:
             return {
                 "status": "error",
@@ -327,8 +321,6 @@ class TelegramGroupService:
                 "groups": [],
                 "message": str(exc),
             }
-        finally:
-            await client.disconnect()
 
     def _session_file(self, phone: str) -> Path:
         return (self.session_dir / phone).with_suffix(".session")

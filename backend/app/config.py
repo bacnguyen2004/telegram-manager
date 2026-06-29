@@ -26,6 +26,13 @@ class Settings:
         os.getenv("SESSION_FOLDER")
         or os.getenv("SESSION_DIR", "runtime/sessions")
     )
+    session_lock_dir: Path = resolve_project_path(
+        os.getenv("SESSION_LOCK_DIR", "runtime/locks")
+    )
+    session_lock_timeout: float = float(os.getenv("TG_SESSION_LOCK_TIMEOUT", "120") or 120)
+    session_lock_stale_seconds: float = float(
+        os.getenv("TG_SESSION_LOCK_STALE_SECONDS", "300") or 300
+    )
 
     def validate_telegram_config(self) -> None:
         if not self.telegram_api_id or not self.telegram_api_hash:
@@ -33,10 +40,19 @@ class Settings:
 
     def ensure_runtime_dirs(self) -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        self.session_lock_dir.mkdir(parents=True, exist_ok=True)
         (BASE_DIR / "runtime").mkdir(parents=True, exist_ok=True)
 
 
 settings = Settings()
 
+from .utils.session_lock import SessionLock  # noqa: E402
+
+session_lock = SessionLock(
+    settings.session_lock_dir,
+    timeout=settings.session_lock_timeout,
+    stale_seconds=settings.session_lock_stale_seconds,
+)
+
 # Re-export for services that need project root.
-__all__ = ["BASE_DIR", "settings"]
+__all__ = ["BASE_DIR", "session_lock", "settings"]

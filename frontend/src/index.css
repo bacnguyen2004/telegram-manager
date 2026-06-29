@@ -1055,6 +1055,42 @@ a {
   font-size: 11px;
 }
 
+.message-compose {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.message-compose-field {
+  margin-bottom: 10px;
+}
+
+.message-compose-field textarea {
+  padding: 11px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-strong);
+  font-size: 15px;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+  min-height: 72px;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.message-compose-field textarea:focus {
+  border-color: var(--accent);
+}
+
+.message-compose-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;

@@ -3,6 +3,7 @@ import type {
   CheckSessionsData,
   DialogMessagesData,
   DialogsData,
+  SendMessageData,
   GroupActionData,
   GroupsData,
   LeaveAllGroupsData,
@@ -176,5 +177,12 @@ export const api = {
     return request<DialogMessagesData>(
       `/dialogs/${encodeURIComponent(phone)}/messages?${params}`,
     )
+  },
+
+  sendMessage(phone: string, peerId: string, text: string) {
+    return request<SendMessageData>('/messages/send', {
+      method: 'POST',
+      body: JSON.stringify({ phone, peer_id: peerId, text }),
+    })
   },
 }

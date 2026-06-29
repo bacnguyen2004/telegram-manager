@@ -36,8 +36,10 @@ export function DialogsPage() {
   const [messagesTitle, setMessagesTitle] = useState('')
   const [filter, setFilter] = useState<KindFilter>('all')
   const [search, setSearch] = useState('')
+  const [draftText, setDraftText] = useState('')
   const [loadingDialogs, setLoadingDialogs] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
+  const [sending, setSending] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
@@ -88,29 +90,66 @@ export function DialogsPage() {
     }
   }
 
-  async function handleSelectDialog(dialog: DialogItem) {
-    if (!phone) return
-    setSelected(dialog)
-    setLoadingMessages(true)
-    resetAlerts()
-    setMessages([])
-    setMessagesTitle(dialog.title)
+  async function loadMessages(dialog: DialogItem, showLoading = true) {
+    if (!phone) return false
+    if (showLoading) {
+      setLoadingMessages(true)
+      setMessages([])
+    }
     try {
       const res = await api.getDialogMessages(phone, dialog.id)
       if (!res.success || !res.data) {
         setError(res.error ?? 'Không tải được tin nhắn')
+        return false
+      }
+      if (res.data.status === 'error') {
+        setError(res.data.message)
+        return false
+      }
+      setMessages(res.data.messages)
+      setMessagesTitle(res.data.title || dialog.title)
+      return true
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không kết nối được API.')
+      return false
+    } finally {
+      if (showLoading) setLoadingMessages(false)
+    }
+  }
+
+  async function handleSelectDialog(dialog: DialogItem) {
+    setSelected(dialog)
+    setDraftText('')
+    resetAlerts()
+    setMessagesTitle(dialog.title)
+    await loadMessages(dialog)
+  }
+
+  async function handleSendMessage(e: React.FormEvent) {
+    e.preventDefault()
+    if (!phone || !selected) return
+    const text = draftText.trim()
+    if (!text) return
+
+    setSending(true)
+    resetAlerts()
+    try {
+      const res = await api.sendMessage(phone, selected.id, text)
+      if (!res.success || !res.data) {
+        setError(res.error ?? 'Gửi tin thất bại')
         return
       }
       if (res.data.status === 'error') {
         setError(res.data.message)
         return
       }
-      setMessages(res.data.messages)
-      setMessagesTitle(res.data.title || dialog.title)
+      setDraftText('')
+      setSuccess(res.data.message)
+      await loadMessages(selected, false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không kết nối được API.')
     } finally {
-      setLoadingMessages(false)
+      setSending(false)
     }
   }
 
@@ -299,6 +338,35 @@ export function DialogsPage() {
                   </li>
                 ))}
               </ul>
+            )}
+
+            {selected && (
+              <form className="message-compose" onSubmit={(e) => void handleSendMessage(e)}>
+                <label className="field message-compose-field">
+                  <span>
+                    <code>POST /api/messages/send</code>
+                  </span>
+                  <textarea
+                    rows={3}
+                    placeholder="Nhập tin nhắn…"
+                    value={draftText}
+                    onChange={(e) => setDraftText(e.target.value)}
+                    disabled={sending || loadingMessages}
+                    maxLength={4096}
+                    required
+                  />
+                </label>
+                <div className="message-compose-actions">
+                  <span className="muted">{draftText.length}/4096</span>
+                  <button
+                    type="submit"
+                    className="btn btn--primary"
+                    disabled={sending || loadingMessages || !draftText.trim()}
+                  >
+                    {sending ? 'Đang gửi…' : 'Gửi'}
+                  </button>
+                </div>
+              </form>
             )}
           </div>
         </section>

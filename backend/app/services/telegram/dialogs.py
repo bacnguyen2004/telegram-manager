@@ -5,6 +5,7 @@ from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 
 from ...config import settings
+from .client import telethon_session
 
 
 class TelegramDialogService:
@@ -32,85 +33,83 @@ class TelegramDialogService:
                 f"Khong tim thay file session: {session_file}",
             )
 
-        session_base = self.session_dir / phone
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
-                return self._dialogs_error(
-                    phone,
-                    "Session chua dang nhap hoac da het han",
-                )
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._dialogs_error(
+                        phone,
+                        "Session chua dang nhap hoac da het han",
+                    )
 
-            dialogs = await client.get_dialogs(limit=limit)
-            items: list[dict] = []
-            counts = {"private": 0, "bot": 0, "group": 0, "channel": 0}
+                dialogs = await client.get_dialogs(limit=limit)
+                items: list[dict] = []
+                counts = {"private": 0, "bot": 0, "group": 0, "channel": 0}
 
-            for dialog in dialogs:
-                entity = dialog.entity
-                username = getattr(entity, "username", None) or ""
-                peer_id = getattr(dialog, "id", None)
-                title = dialog.name or username or str(peer_id or "")
+                for dialog in dialogs:
+                    entity = dialog.entity
+                    username = getattr(entity, "username", None) or ""
+                    peer_id = getattr(dialog, "id", None)
+                    title = dialog.name or username or str(peer_id or "")
 
-                is_bot = bool(getattr(entity, "bot", False))
-                is_channel = bool(dialog.is_channel and not dialog.is_group)
-                is_group = bool(dialog.is_group)
-                is_private = bool(dialog.is_user and not is_bot)
+                    is_bot = bool(getattr(entity, "bot", False))
+                    is_channel = bool(dialog.is_channel and not dialog.is_group)
+                    is_group = bool(dialog.is_group)
+                    is_private = bool(dialog.is_user and not is_bot)
 
-                if is_bot:
-                    kind = "bot"
-                elif is_channel:
-                    kind = "channel"
-                elif is_group:
-                    kind = "group"
-                elif is_private:
-                    kind = "private"
-                else:
-                    kind = "chat"
+                    if is_bot:
+                        kind = "bot"
+                    elif is_channel:
+                        kind = "channel"
+                    elif is_group:
+                        kind = "group"
+                    elif is_private:
+                        kind = "private"
+                    else:
+                        kind = "chat"
 
-                if kind in counts:
-                    counts[kind] += 1
+                    if kind in counts:
+                        counts[kind] += 1
 
-                message = dialog.message
-                preview = getattr(message, "message", "") or ""
-                if not preview and getattr(message, "media", None):
-                    preview = f"[{self._message_content_type(message)}]"
+                    message = dialog.message
+                    preview = getattr(message, "message", "") or ""
+                    if not preview and getattr(message, "media", None):
+                        preview = f"[{self._message_content_type(message)}]"
 
-                items.append(
-                    {
-                        "id": str(peer_id or getattr(entity, "id", "")),
-                        "entity_id": str(getattr(entity, "id", "")),
-                        "title": title,
-                        "username": username,
-                        "kind": kind,
-                        "is_private": is_private,
-                        "is_group": is_group,
-                        "is_channel": is_channel,
-                        "is_bot": is_bot,
-                        "link": f"https://t.me/{username}" if username else "",
-                        "unread_count": int(getattr(dialog, "unread_count", 0) or 0),
-                        "pinned": bool(getattr(dialog, "pinned", False)),
-                        "muted": bool(getattr(dialog, "muted", False)),
-                        "date": self._format_dt(message.date if message else None),
-                        "last_message_id": getattr(message, "id", "") if message else "",
-                        "last_message": preview[:260],
-                    }
-                )
+                    items.append(
+                        {
+                            "id": str(peer_id or getattr(entity, "id", "")),
+                            "entity_id": str(getattr(entity, "id", "")),
+                            "title": title,
+                            "username": username,
+                            "kind": kind,
+                            "is_private": is_private,
+                            "is_group": is_group,
+                            "is_channel": is_channel,
+                            "is_bot": is_bot,
+                            "link": f"https://t.me/{username}" if username else "",
+                            "unread_count": int(getattr(dialog, "unread_count", 0) or 0),
+                            "pinned": bool(getattr(dialog, "pinned", False)),
+                            "muted": bool(getattr(dialog, "muted", False)),
+                            "date": self._format_dt(message.date if message else None),
+                            "last_message_id": getattr(message, "id", "") if message else "",
+                            "last_message": preview[:260],
+                        }
+                    )
 
-            return {
-                "status": "success",
-                "phone": phone,
-                "total": len(items),
-                "counts": counts,
-                "dialogs": items,
-                "message": "OK",
-            }
+                return {
+                    "status": "success",
+                    "phone": phone,
+                    "total": len(items),
+                    "counts": counts,
+                    "dialogs": items,
+                    "message": "OK",
+                }
         except FloodWaitError as exc:
             return self._dialogs_error(phone, f"Flood wait {exc.seconds}s")
         except Exception as exc:
             return self._dialogs_error(phone, str(exc))
-        finally:
-            await client.disconnect()
 
     async def get_messages(
         self,
@@ -140,89 +139,87 @@ class TelegramDialogService:
                 f"Khong tim thay file session: {session_file}",
             )
 
-        session_base = self.session_dir / phone
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
-                return self._messages_error(
-                    phone,
-                    peer_ref,
-                    "Session chua dang nhap hoac da het han",
-                )
-
-            entity = await self._resolve_peer(client, peer_ref)
-            messages = await client.get_messages(entity, limit=limit)
-            me = await client.get_me()
-            me_id = getattr(me, "id", None)
-
-            rows: list[dict] = []
-            for message in reversed(messages):
-                sender_id = None
-                from_id = getattr(message, "from_id", None)
-                if from_id is not None:
-                    sender_id = getattr(from_id, "user_id", None) or getattr(
-                        from_id, "channel_id", None
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._messages_error(
+                        phone,
+                        peer_ref,
+                        "Session chua dang nhap hoac da het han",
                     )
 
-                sender_name = ""
-                if sender_id:
-                    try:
-                        sender = await message.get_sender()
-                        sender_name = " ".join(
-                            part
-                            for part in [
-                                getattr(sender, "first_name", "") or "",
-                                getattr(sender, "last_name", "") or "",
-                            ]
-                            if part
-                        ).strip() or getattr(sender, "username", "") or str(sender_id)
-                    except Exception:
-                        sender_name = str(sender_id)
+                entity = await self._resolve_peer(client, peer_ref)
+                messages = await client.get_messages(entity, limit=limit)
+                me = await client.get_me()
+                me_id = getattr(me, "id", None)
 
-                text = message.message or ""
-                content_type = self._message_content_type(message)
-                if not text and message.media:
-                    text = f"[{content_type}]"
+                rows: list[dict] = []
+                for message in reversed(messages):
+                    sender_id = None
+                    from_id = getattr(message, "from_id", None)
+                    if from_id is not None:
+                        sender_id = getattr(from_id, "user_id", None) or getattr(
+                            from_id, "channel_id", None
+                        )
 
-                rows.append(
-                    {
-                        "id": message.id,
-                        "date": self._format_dt(message.date, with_seconds=True),
-                        "sender_id": sender_id or "",
-                        "sender_name": sender_name,
-                        "outgoing": bool(
-                            getattr(message, "out", False)
-                            or (sender_id and sender_id == me_id)
-                        ),
-                        "content_type": content_type,
-                        "has_media": bool(message.media),
-                        "text": text[:2000],
-                    }
+                    sender_name = ""
+                    if sender_id:
+                        try:
+                            sender = await message.get_sender()
+                            sender_name = " ".join(
+                                part
+                                for part in [
+                                    getattr(sender, "first_name", "") or "",
+                                    getattr(sender, "last_name", "") or "",
+                                ]
+                                if part
+                            ).strip() or getattr(sender, "username", "") or str(sender_id)
+                        except Exception:
+                            sender_name = str(sender_id)
+
+                    text = message.message or ""
+                    content_type = self._message_content_type(message)
+                    if not text and message.media:
+                        text = f"[{content_type}]"
+
+                    rows.append(
+                        {
+                            "id": message.id,
+                            "date": self._format_dt(message.date, with_seconds=True),
+                            "sender_id": sender_id or "",
+                            "sender_name": sender_name,
+                            "outgoing": bool(
+                                getattr(message, "out", False)
+                                or (sender_id and sender_id == me_id)
+                            ),
+                            "content_type": content_type,
+                            "has_media": bool(message.media),
+                            "text": text[:2000],
+                        }
+                    )
+
+                title = (
+                    getattr(entity, "title", None)
+                    or getattr(entity, "first_name", None)
+                    or getattr(entity, "username", "")
+                    or peer_ref
                 )
 
-            title = (
-                getattr(entity, "title", None)
-                or getattr(entity, "first_name", None)
-                or getattr(entity, "username", "")
-                or peer_ref
-            )
-
-            return {
-                "status": "success",
-                "phone": phone,
-                "peer_id": peer_ref,
-                "title": str(title),
-                "messages": rows,
-                "total": len(rows),
-                "message": "OK",
-            }
+                return {
+                    "status": "success",
+                    "phone": phone,
+                    "peer_id": peer_ref,
+                    "title": str(title),
+                    "messages": rows,
+                    "total": len(rows),
+                    "message": "OK",
+                }
         except FloodWaitError as exc:
             return self._messages_error(phone, peer_ref, f"Flood wait {exc.seconds}s")
         except Exception as exc:
             return self._messages_error(phone, peer_ref, str(exc))
-        finally:
-            await client.disconnect()
 
     async def _resolve_peer(self, client: TelegramClient, peer_ref: str):
         if peer_ref.lstrip("-").isdigit():

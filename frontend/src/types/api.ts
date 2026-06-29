@@ -201,3 +201,11 @@ export interface DialogMessagesData {
   messages: DialogMessageItem[]
   message: string
 }
+
+export interface SendMessageData {
+  status: 'success' | 'error'
+  phone: string
+  peer_id: string
+  message_id: number | null
+  message: string
+}

@@ -3,10 +3,10 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from telethon import TelegramClient
 from telethon.errors import FloodWaitError
 
-from ...config import BASE_DIR, settings
+from ...config import BASE_DIR, session_lock, settings
+from .client import telethon_session
 
 
 class TelegramSessionService:
@@ -69,7 +69,7 @@ class TelegramSessionService:
             message="OK",
         )
 
-    def delete_session(self, phone: str) -> dict:
+    async def delete_session(self, phone: str) -> dict:
         phone = phone.strip()
         if not phone:
             return self._delete_result("error", phone, message="Thieu phone")
@@ -86,25 +86,29 @@ class TelegramSessionService:
                 message=f"Khong tim thay file session: {session_file}",
             )
 
-        deleted_files: list[str] = []
-        if session_file.exists():
-            session_file.unlink()
-            deleted_files.append(str(session_file))
-        if journal_file.exists():
-            journal_file.unlink()
-            deleted_files.append(str(journal_file))
+        try:
+            async with session_lock.acquire(phone):
+                deleted_files: list[str] = []
+                if session_file.exists():
+                    session_file.unlink()
+                    deleted_files.append(str(session_file))
+                if journal_file.exists():
+                    journal_file.unlink()
+                    deleted_files.append(str(journal_file))
 
-        pending_auth_cleared = pending_auth_file.exists()
-        if pending_auth_cleared:
-            pending_auth_file.unlink()
+                pending_auth_cleared = pending_auth_file.exists()
+                if pending_auth_cleared:
+                    pending_auth_file.unlink()
 
-        return self._delete_result(
-            "success",
-            phone,
-            deleted_files=deleted_files,
-            pending_auth_cleared=pending_auth_cleared,
-            message="Da xoa session",
-        )
+                return self._delete_result(
+                    "success",
+                    phone,
+                    deleted_files=deleted_files,
+                    pending_auth_cleared=pending_auth_cleared,
+                    message="Da xoa session",
+                )
+        except Exception as exc:
+            return self._delete_result("error", phone, message=str(exc))
 
     async def get_me(self, phone: str) -> dict:
         settings.validate_telegram_config()
@@ -122,26 +126,27 @@ class TelegramSessionService:
                 message=f"Khong tim thay file session: {session_file}",
             )
 
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
-                return self._me_result(
-                    "unauthorized",
-                    phone,
-                    message="Session chua dang nhap hoac da het han",
-                )
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._me_result(
+                        "unauthorized",
+                        phone,
+                        message="Session chua dang nhap hoac da het han",
+                    )
 
-            me = await client.get_me()
-            return {
-                "status": "success",
-                "phone": phone,
-                "me_id": me.id,
-                "first_name": me.first_name,
-                "last_name": me.last_name,
-                "username": me.username,
-                "message": "OK",
-            }
+                me = await client.get_me()
+                return {
+                    "status": "success",
+                    "phone": phone,
+                    "me_id": me.id,
+                    "first_name": me.first_name,
+                    "last_name": me.last_name,
+                    "username": me.username,
+                    "message": "OK",
+                }
         except FloodWaitError as exc:
             return self._me_result(
                 "error",
@@ -150,8 +155,6 @@ class TelegramSessionService:
             )
         except Exception as exc:
             return self._me_result("error", phone, message=str(exc))
-        finally:
-            await client.disconnect()
 
     async def check_sessions(self, phones: list[str] | None = None) -> dict:
         settings.validate_telegram_config()
@@ -187,32 +190,33 @@ class TelegramSessionService:
                 message=f"Khong tim thay file session: {session_file}",
             )
 
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
-                return self._result(
-                    phone,
-                    "unauthorized",
-                    str(session_file),
-                    message="Session chua dang nhap hoac da het han",
-                )
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._result(
+                        phone,
+                        "unauthorized",
+                        str(session_file),
+                        message="Session chua dang nhap hoac da het han",
+                    )
 
-            me = await client.get_me()
-            username = me.username
-            display = " ".join(part for part in [me.first_name, me.last_name] if part).strip()
-            message = f"Live: {display or phone}"
-            if username:
-                message += f" (@{username})"
+                me = await client.get_me()
+                username = me.username
+                display = " ".join(part for part in [me.first_name, me.last_name] if part).strip()
+                message = f"Live: {display or phone}"
+                if username:
+                    message += f" (@{username})"
 
-            return {
-                "phone": phone,
-                "status": "active",
-                "session_file": str(session_file),
-                "me_id": me.id,
-                "username": username,
-                "message": message,
-            }
+                return {
+                    "phone": phone,
+                    "status": "active",
+                    "session_file": str(session_file),
+                    "me_id": me.id,
+                    "username": username,
+                    "message": message,
+                }
         except FloodWaitError as exc:
             return self._result(
                 phone,
@@ -222,8 +226,6 @@ class TelegramSessionService:
             )
         except Exception as exc:
             return self._result(phone, "error", str(session_file), message=str(exc))
-        finally:
-            await client.disconnect()
 
     def _pending_auth_path(self, phone: str) -> Path:
         safe_phone = re.sub(r"[^0-9A-Za-z_+-]+", "_", phone)

@@ -2,7 +2,6 @@ import json
 import re
 from pathlib import Path
 
-from telethon import TelegramClient
 from telethon.errors import (
     ChannelPrivateError,
     PhoneCodeExpiredError,
@@ -23,6 +22,7 @@ from telethon.tl.types import (
 )
 
 from ...config import BASE_DIR, settings
+from .client import telethon_session
 
 
 class TelegramAuthService:
@@ -44,31 +44,29 @@ class TelegramAuthService:
         except ValueError as exc:
             return self._result("error", str(exc), phone)
 
-        session_base = self.session_dir / phone
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if await client.is_user_authorized():
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if await client.is_user_authorized():
+                    return self._result(
+                        "info",
+                        "Session da dang nhap san. Kiem tra GET /api/sessions.",
+                        phone,
+                    )
+                sent = await client.send_code_request(phone)
+                self._save_phone_code_hash(phone, sent.phone_code_hash)
                 return self._result(
-                    "info",
-                    "Session da dang nhap san. Kiem tra GET /api/sessions.",
+                    "success",
+                    "Da gui ma OTP qua Telegram app. Tiep theo goi POST /api/auth/login hoac /api/auth/register",
                     phone,
                 )
-            sent = await client.send_code_request(phone)
-            self._save_phone_code_hash(phone, sent.phone_code_hash)
-            return self._result(
-                "success",
-                "Da gui ma OTP qua Telegram app. Tiep theo goi POST /api/auth/login hoac /api/auth/register",
-                phone,
-            )
         except PhoneNumberBannedError:
             return self._result("error", "So dien thoai da bi cam", phone)
         except PhoneNumberInvalidError:
             return self._result("error", "So dien thoai khong hop le", phone)
         except Exception as exc:
             return self._result("error", str(exc), phone)
-        finally:
-            await client.disconnect()
 
     async def login(self, phone: str, code: str, password: str | None = None) -> dict:
         phone = phone.strip()
@@ -94,44 +92,45 @@ class TelegramAuthService:
 
         phone_code_hash = self._load_phone_code_hash(phone)
 
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if await client.is_user_authorized():
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if await client.is_user_authorized():
+                    me = await client.get_me()
+                    self._clear_pending_auth(phone)
+                    return self._success_result(phone, session_file, me)
+
+                if password and not code:
+                    await client.sign_in(password=password)
+                elif password and phone_code_hash and code:
+                    try:
+                        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+                    except SessionPasswordNeededError:
+                        await client.sign_in(password=password)
+                elif code:
+                    if not phone_code_hash:
+                        return self._result(
+                            "error",
+                            "Thieu phone_code_hash. Hay goi POST /api/auth/send-code lai.",
+                            phone,
+                        )
+                    try:
+                        await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
+                    except SessionPasswordNeededError:
+                        if not password:
+                            return self._result(
+                                "need_2fa",
+                                "Tai khoan bat 2FA. Gui lai POST /api/auth/login kem password.",
+                                phone,
+                            )
+                        await client.sign_in(password=password)
+                else:
+                    return self._result("error", "Thieu code", phone)
+
                 me = await client.get_me()
                 self._clear_pending_auth(phone)
                 return self._success_result(phone, session_file, me)
-
-            if password and not code:
-                await client.sign_in(password=password)
-            elif password and phone_code_hash and code:
-                try:
-                    await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
-                except SessionPasswordNeededError:
-                    await client.sign_in(password=password)
-            elif code:
-                if not phone_code_hash:
-                    return self._result(
-                        "error",
-                        "Thieu phone_code_hash. Hay goi POST /api/auth/send-code lai.",
-                        phone,
-                    )
-                try:
-                    await client.sign_in(phone, code, phone_code_hash=phone_code_hash)
-                except SessionPasswordNeededError:
-                    if not password:
-                        return self._result(
-                            "need_2fa",
-                            "Tai khoan bat 2FA. Gui lai POST /api/auth/login kem password.",
-                            phone,
-                        )
-                    await client.sign_in(password=password)
-            else:
-                return self._result("error", "Thieu code", phone)
-
-            me = await client.get_me()
-            self._clear_pending_auth(phone)
-            return self._success_result(phone, session_file, me)
         except PhoneCodeInvalidError:
             return self._result("error", "Ma OTP khong hop le", phone)
         except PhoneCodeExpiredError:
@@ -140,8 +139,6 @@ class TelegramAuthService:
             return self._result("error", "So dien thoai da bi cam", phone)
         except Exception as exc:
             return self._result("error", str(exc), phone)
-        finally:
-            await client.disconnect()
 
     async def register(
         self,
@@ -184,29 +181,30 @@ class TelegramAuthService:
                 phone,
             )
 
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if await client.is_user_authorized():
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if await client.is_user_authorized():
+                    me = await client.get_me()
+                    self._clear_pending_auth(phone)
+                    return self._success_result(phone, session_file, me)
+
+                await client.sign_up(
+                    code,
+                    first_name=first_name,
+                    last_name=last_name,
+                    phone=phone,
+                    phone_code_hash=phone_code_hash,
+                )
                 me = await client.get_me()
                 self._clear_pending_auth(phone)
-                return self._success_result(phone, session_file, me)
-
-            await client.sign_up(
-                code,
-                first_name=first_name,
-                last_name=last_name,
-                phone=phone,
-                phone_code_hash=phone_code_hash,
-            )
-            me = await client.get_me()
-            self._clear_pending_auth(phone)
-            return self._success_result(
-                phone,
-                session_file,
-                me,
-                message="Dang ky thanh cong, da tao file .session",
-            )
+                return self._success_result(
+                    phone,
+                    session_file,
+                    me,
+                    message="Dang ky thanh cong, da tao file .session",
+                )
         except PhoneCodeInvalidError:
             return self._result("error", "Ma OTP khong hop le", phone)
         except PhoneCodeExpiredError:
@@ -215,8 +213,6 @@ class TelegramAuthService:
             return self._result("error", "So dien thoai da bi cam", phone)
         except Exception as exc:
             return self._result("error", str(exc), phone)
-        finally:
-            await client.disconnect()
 
     async def get_login_code(self, phone: str) -> dict:
         phone = phone.strip()
@@ -238,47 +234,48 @@ class TelegramAuthService:
                 "message": f"Khong tim thay file session: {session_file}",
             }
 
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return {
+                        "status": "error",
+                        "phone": phone,
+                        "code": "",
+                        "message": "Session chua dang nhap hoac da het han",
+                    }
+
+                bot = await client.get_entity(777000)
+                history = await client(
+                    GetHistoryRequest(
+                        peer=bot,
+                        limit=1,
+                        offset_date=None,
+                        offset_id=0,
+                        max_id=0,
+                        min_id=0,
+                        add_offset=0,
+                        hash=0,
+                    )
+                )
+                if history.messages:
+                    code_message = history.messages[0].message
+                    code_digits = "".join(char for char in code_message if char.isdigit())
+                    if code_digits:
+                        return {
+                            "status": "success",
+                            "phone": phone,
+                            "code": code_digits,
+                            "message": "OK",
+                        }
+
                 return {
                     "status": "error",
                     "phone": phone,
                     "code": "",
-                    "message": "Session chua dang nhap hoac da het han",
+                    "message": "Khong tim thay ma xac thuc trong tin nhan Telegram",
                 }
-
-            bot = await client.get_entity(777000)
-            history = await client(
-                GetHistoryRequest(
-                    peer=bot,
-                    limit=1,
-                    offset_date=None,
-                    offset_id=0,
-                    max_id=0,
-                    min_id=0,
-                    add_offset=0,
-                    hash=0,
-                )
-            )
-            if history.messages:
-                code_message = history.messages[0].message
-                code_digits = "".join(char for char in code_message if char.isdigit())
-                if code_digits:
-                    return {
-                        "status": "success",
-                        "phone": phone,
-                        "code": code_digits,
-                        "message": "OK",
-                    }
-
-            return {
-                "status": "error",
-                "phone": phone,
-                "code": "",
-                "message": "Khong tim thay ma xac thuc trong tin nhan Telegram",
-            }
         except ChannelPrivateError:
             return {
                 "status": "error",
@@ -288,8 +285,6 @@ class TelegramAuthService:
             }
         except Exception as exc:
             return {"status": "error", "phone": phone, "code": "", "message": str(exc)}
-        finally:
-            await client.disconnect()
 
     async def update_2fa(
         self,
@@ -322,26 +317,25 @@ class TelegramAuthService:
                 phone,
             )
 
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
-                return self._result("error", "Session chua dang nhap hoac da het han", phone)
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._result("error", "Session chua dang nhap hoac da het han", phone)
 
-            if current_password:
-                await client.edit_2fa(
-                    current_password=current_password,
-                    new_password=new_password,
-                    hint=hint,
-                )
-            else:
-                await client.edit_2fa(new_password=new_password, hint=hint)
+                if current_password:
+                    await client.edit_2fa(
+                        current_password=current_password,
+                        new_password=new_password,
+                        hint=hint,
+                    )
+                else:
+                    await client.edit_2fa(new_password=new_password, hint=hint)
 
-            return self._result("success", "Cap nhat 2FA thanh cong", phone)
+                return self._result("success", "Cap nhat 2FA thanh cong", phone)
         except Exception as exc:
             return self._result("error", str(exc), phone)
-        finally:
-            await client.disconnect()
 
     async def update_privacy(self, phone: str, rule_type: str) -> dict:
         phone = phone.strip()
@@ -377,32 +371,31 @@ class TelegramAuthService:
                 phone,
             )
 
-        client = TelegramClient(str(session_base), self.api_id, self.api_hash)
-        await client.connect()
         try:
-            if not await client.is_user_authorized():
-                return self._result("error", "Session chua dang nhap hoac da het han", phone)
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._result("error", "Session chua dang nhap hoac da het han", phone)
 
-            await client(
-                SetPrivacyRequest(
-                    key=InputPrivacyKeyChatInvite(),
-                    rules=[rule],
+                await client(
+                    SetPrivacyRequest(
+                        key=InputPrivacyKeyChatInvite(),
+                        rules=[rule],
+                    )
                 )
-            )
-            return {
-                "status": "success",
-                "message": "Cap nhat quyen rieng tu thanh cong",
-                "phone": phone,
-                "rule_type": rule_type,
-            }
+                return {
+                    "status": "success",
+                    "message": "Cap nhat quyen rieng tu thanh cong",
+                    "phone": phone,
+                    "rule_type": rule_type,
+                }
         except PrivacyKeyInvalidError:
             return self._result("error", "Khoa quyen rieng tu khong hop le", phone)
         except PrivacyTooLongError:
             return self._result("error", "Qua nhieu thuc the", phone)
         except Exception as exc:
             return self._result("error", str(exc), phone)
-        finally:
-            await client.disconnect()
 
     def _pending_auth_path(self, phone: str) -> Path:
         safe_phone = re.sub(r"[^0-9A-Za-z_+-]+", "_", phone)

@@ -40,7 +40,7 @@ async def get_session(phone: str) -> dict:
 
 @router.delete("/{phone}", response_model=ApiEnvelope[DeleteSessionData])
 async def delete_session(phone: str) -> dict:
-    result = telegram_session_service.delete_session(phone)
+    result = await telegram_session_service.delete_session(phone)
     data = DeleteSessionData(**result)
     return success_response(data.model_dump())
 
