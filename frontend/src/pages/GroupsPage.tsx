@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
+import { Pagination } from '../components/Pagination'
 import { PhoneSelect } from '../components/PhoneSelect'
+import { usePagination } from '../hooks/usePagination'
 import { StatusBadge } from '../components/StatusBadge'
 import type { GroupItem } from '../types/api'
 
@@ -127,6 +129,17 @@ export function GroupsPage() {
     }
   }
 
+  const {
+    items: pagedGroups,
+    page,
+    setPage,
+    totalPages,
+    from,
+    to,
+    pageSize,
+    setPageSize,
+  } = usePagination(groups, 15)
+
   return (
     <div className="page">
       <header className="page-header">
@@ -164,7 +177,7 @@ export function GroupsPage() {
       {info && <Alert type="info" message={info} />}
 
       {tab === 'join' && (
-        <section className="panel" style={{ maxWidth: 520 }}>
+        <section className="panel panel--full">
           <h2>
             <code>POST /api/groups/join</code>
           </h2>
@@ -188,7 +201,7 @@ export function GroupsPage() {
       )}
 
       {tab === 'leave' && (
-        <section className="panel" style={{ maxWidth: 520 }}>
+        <section className="panel panel--full">
           <h2>
             <code>POST /api/groups/leave</code>
           </h2>
@@ -212,7 +225,7 @@ export function GroupsPage() {
       )}
 
       {tab === 'leave-all' && (
-        <section className="panel" style={{ maxWidth: 520 }}>
+        <section className="panel panel--full">
           <h2>
             <code>POST /api/groups/leave-all</code>
           </h2>
@@ -284,7 +297,7 @@ export function GroupsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {groups.map((group) => (
+                    {pagedGroups.map((group) => (
                       <tr key={group.id}>
                         <td>{group.title || '—'}</td>
                         <td>
@@ -307,6 +320,17 @@ export function GroupsPage() {
                   </tbody>
                 </table>
               </div>
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                total={groups.length}
+                from={from}
+                to={to}
+                onPageChange={setPage}
+                pageSize={pageSize}
+                pageSizeOptions={[15, 30, 50]}
+                onPageSizeChange={setPageSize}
+              />
             </section>
           )}
         </>

@@ -22,6 +22,7 @@ class DialogItem(BaseModel):
     is_bot: bool
     link: str
     unread_count: int
+    read_inbox_max_id: int = 0
     pinned: bool
     muted: bool
     date: str

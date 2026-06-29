@@ -78,6 +78,13 @@ class TelegramDialogService:
                     if not preview and getattr(message, "media", None):
                         preview = f"[{self._message_content_type(message)}]"
 
+                    inner_dialog = getattr(dialog, "dialog", None)
+                    read_inbox_max_id = (
+                        int(getattr(inner_dialog, "read_inbox_max_id", 0) or 0)
+                        if inner_dialog is not None
+                        else 0
+                    )
+
                     items.append(
                         {
                             "id": str(peer_id or getattr(entity, "id", "")),
@@ -91,6 +98,7 @@ class TelegramDialogService:
                             "is_bot": is_bot,
                             "link": f"https://t.me/{username}" if username else "",
                             "unread_count": int(getattr(dialog, "unread_count", 0) or 0),
+                            "read_inbox_max_id": read_inbox_max_id,
                             "pinned": bool(getattr(dialog, "pinned", False)),
                             "muted": bool(getattr(dialog, "muted", False)),
                             "date": self._format_dt(message.date if message else None),

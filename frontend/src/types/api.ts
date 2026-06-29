@@ -165,6 +165,7 @@ export interface DialogItem {
   is_bot: boolean
   link: string
   unread_count: number
+  read_inbox_max_id: number
   pinned: boolean
   muted: boolean
   date: string

@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
+import { Pagination } from '../components/Pagination'
 import { StatusBadge } from '../components/StatusBadge'
+import { usePagination } from '../hooks/usePagination'
 import type { CheckSessionItem, SessionDetailData, SessionMeData } from '../types/api'
 import { formatBytes, formatDate } from '../utils/format'
 
@@ -184,6 +186,16 @@ export function SessionsPage() {
   }
 
   const resultByPhone = new Map(checkResults.map((item) => [item.phone, item]))
+  const {
+    items: pagedSessions,
+    page,
+    setPage,
+    totalPages,
+    from,
+    to,
+    pageSize,
+    setPageSize,
+  } = usePagination(sessions, 10)
 
   return (
     <div className="page">
@@ -258,7 +270,7 @@ export function SessionsPage() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.map((phone) => {
+                {pagedSessions.map((phone) => {
                   const checked = resultByPhone.get(phone)
                   const isDeleting = deletingPhone === phone
                   const isChecking = checkingPhone === phone
@@ -306,6 +318,20 @@ export function SessionsPage() {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && sessions.length > 0 && (
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            total={sessions.length}
+            from={from}
+            to={to}
+            onPageChange={setPage}
+            pageSize={pageSize}
+            pageSizeOptions={[10, 20, 50]}
+            onPageSizeChange={setPageSize}
+          />
         )}
       </section>
 
