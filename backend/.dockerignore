@@ -1,0 +1,12 @@
+venv/
+.env
+.env.*
+!.env.example
+runtime/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+scripts/
+*.session
+*.session-journal

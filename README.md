@@ -1,5 +1,7 @@
 # Telegram Manager
 
+![CI](https://github.com/bacnguyen2004/telegram-manager-api/actions/workflows/ci.yml/badge.svg)
+
 Monorepo FastAPI + React — quản lý tài khoản Telegram qua HTTP API và dashboard.
 
 ```
@@ -44,9 +46,35 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
 ```powershell
 pip install -r requirements-dev.txt
 pytest
+# hoac: python -m pytest
 ```
 
-Test gồm: health, sessions, messages/send (mock Telethon), session lock (2 request cùng phone).
+Chay tu thu muc `backend` (sau `venv\Scripts\activate`). Neu loi `No module named 'app'`, dung `python -m pytest` hoac cap nhat `pytest.ini` co `pythonpath = .`.
+
+Test gồm: health, sessions, messages/send, reply (mock Telethon), session lock.
+
+CI tự chạy pytest trên mỗi push/PR (GitHub Actions).
+
+---
+
+## Docker
+
+Chạy backend bằng 1 lệnh (không cần cài Python local):
+
+```powershell
+# Tu repo root — tao backend/.env truoc (copy tu .env.example)
+docker compose up --build
+```
+
+- API: http://127.0.0.1:8001/docs
+- Session files luu trong Docker volume `telegram-sessions`
+
+Dung `.env` o `backend/` hoac dat bien moi truong `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` truoc khi `docker compose up`.
+
+```powershell
+docker compose down      # dung container
+docker compose up -d     # chay nen
+```
 
 ---
 
@@ -199,8 +227,9 @@ app/
 - [x] Auth, sessions, groups, dialogs, messages/send, messages/reply
 - [x] Session lock, React dashboard
 - [x] pytest cơ bản
+- [x] GitHub Actions CI
+- [x] Docker Compose (api)
 - [ ] media upload
-- [ ] Docker Compose
 - [ ] Task system (bulk join/send)
 
 Chi tiết: `PLAN.md`
