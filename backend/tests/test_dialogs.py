@@ -87,6 +87,12 @@ async def test_get_messages_with_offset_id(client, monkeypatch):
                          "has_photo": False, "text": "hi"}],
             "total": 1,
             "has_more_older": False,
+            "reactions_policy": {
+                "enabled": True,
+                "mode": "some",
+                "allowed_emojis": ["👍", "❤️"],
+                "has_custom": False,
+            },
             "message": "OK",
         }
 
@@ -105,6 +111,8 @@ async def test_get_messages_with_offset_id(client, monkeypatch):
     assert body["success"] is True
     assert captured["offset_id"] == 99
     assert body["data"]["has_more_older"] is False
+    assert body["data"]["reactions_policy"]["mode"] == "some"
+    assert body["data"]["reactions_policy"]["allowed_emojis"] == ["👍", "❤️"]
 
 
 async def test_get_messages_without_offset_id(client, monkeypatch):

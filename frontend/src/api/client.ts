@@ -4,6 +4,7 @@ import type {
   DialogMessagesData,
   DialogsData,
   MarkDialogReadData,
+  ReactMessageData,
   SendMessageData,
   GroupActionData,
   GroupsData,
@@ -248,6 +249,34 @@ export const api = {
         reply_to_msg_id: replyToMsgId,
         text,
       }),
+    })
+  },
+
+  sendReaction(
+    phone: string,
+    peerId: string,
+    messageId: number,
+    emoji: string,
+  ) {
+    return request<ReactMessageData>('/messages/react', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone,
+        peer_id: peerId,
+        message_id: messageId,
+        emoji,
+      }),
+    })
+  },
+
+  removeReaction(phone: string, peerId: string, messageId: number) {
+    const params = new URLSearchParams({
+      phone,
+      peer_id: peerId,
+      message_id: String(messageId),
+    })
+    return request<ReactMessageData>(`/messages/react?${params}`, {
+      method: 'DELETE',
     })
   },
 

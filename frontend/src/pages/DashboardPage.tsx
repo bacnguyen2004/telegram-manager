@@ -36,6 +36,8 @@ const apiMap = [
       { method: 'POST', path: '/api/messages/send', page: '/dialogs' },
       { method: 'POST', path: '/api/messages/reply', page: '/dialogs' },
       { method: 'POST', path: '/api/messages/send-media', page: '/dialogs' },
+      { method: 'POST', path: '/api/messages/react', page: '/dialogs' },
+      { method: 'DELETE', path: '/api/messages/react', page: '/dialogs' },
       { method: 'DELETE', path: '/api/messages/{id}', page: '/dialogs' },
     ],
   },

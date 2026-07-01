@@ -35,3 +35,24 @@ class MessageActionData(BaseModel):
 
 class SendMessageData(MessageActionData):
     pass
+
+
+class ReactMessageRequest(BaseModel):
+    phone: str = Field(..., examples=["+84901234567"])
+    peer_id: str = Field(
+        ...,
+        description="Dialog id, username hoac link t.me",
+        examples=["123456789", "@username"],
+    )
+    message_id: int = Field(..., ge=1, description="ID tin nhan can react")
+    emoji: str = Field(
+        ...,
+        min_length=1,
+        max_length=16,
+        description="Emoji reaction, vi du: thumbs up",
+        examples=["👍", "❤️", "🔥"],
+    )
+
+
+class ReactMessageData(MessageActionData):
+    emoji: str | None = None

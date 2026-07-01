@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
+import { MessageReactionBar } from '../components/MessageReactionBar'
 import { MessageText } from '../components/MessageText'
 import { Pagination } from '../components/Pagination'
 import { PhoneSelect } from '../components/PhoneSelect'
 import { usePagination } from '../hooks/usePagination'
-import type { DialogCounts, DialogItem, DialogMessageItem } from '../types/api'
+import type {
+  DialogCounts,
+  DialogItem,
+  DialogMessageItem,
+  DialogReactionsPolicy,
+} from '../types/api'
 import { avatarHue, dialogInitials, mediaTypeLabel } from '../utils/avatar'
 import { mergeDialogsWithReadState, saveReadState } from '../utils/dialogReadStorage'
 import { inferHasMoreOlder, isStaleMessagesRequest } from '../utils/dialogMessages'
+import { canReactWith, reactionsHint } from '../utils/reactions'
 
 type KindFilter = 'all' | 'private' | 'bot' | 'group' | 'channel'
 
@@ -83,6 +90,10 @@ export function DialogsPage() {
   const [hasMoreOlder, setHasMoreOlder] = useState(false)
   const [sending, setSending] = useState(false)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [reactingId, setReactingId] = useState<number | null>(null)
+  const [reactionsPolicy, setReactionsPolicy] = useState<DialogReactionsPolicy | null>(
+    null,
+  )
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -135,6 +146,11 @@ export function DialogsPage() {
       )
     })
   }, [dialogs, filter, search])
+
+  const reactionPolicyHint = useMemo(
+    () => reactionsHint(reactionsPolicy),
+    [reactionsPolicy],
+  )
 
   const {
     items: pagedDialogs,
@@ -623,6 +639,7 @@ export function DialogsPage() {
     messagesRequestSeqRef.current += 1
     setMessages([])
     setMessagesTitle('')
+    setReactionsPolicy(null)
     setReplyTo(null)
     setLoadedPhotoIds(new Set())
     try {
@@ -675,6 +692,7 @@ export function DialogsPage() {
         return false
       }
       setMessages(res.data.messages)
+      setReactionsPolicy(res.data.reactions_policy ?? null)
       setHasMoreOlder(
         inferHasMoreOlder(
           res.data.messages.length,
@@ -734,6 +752,7 @@ export function DialogsPage() {
     setPendingUnread(fresh.unread_count)
     scrollIntentRef.current = fresh.unread_count > 0 ? 'last-read' : 'latest'
     setMessagesTitle(fresh.title)
+    setReactionsPolicy(null)
     messageRefs.current.clear()
     setLoadedPhotoIds(new Set())
     await loadMessages(fresh)
@@ -741,6 +760,38 @@ export function DialogsPage() {
 
   function revealPhoto(messageId: number) {
     setLoadedPhotoIds((prev) => new Set(prev).add(messageId))
+  }
+
+  async function handleSendReaction(msg: DialogMessageItem, emoji: string) {
+    if (!phone || !selected) return
+
+    const isChosen = (msg.reactions ?? []).some(
+      (reaction) => reaction.chosen && reaction.emoji === emoji,
+    )
+    if (!canReactWith(reactionsPolicy, emoji, isChosen)) {
+      setError(reactionPolicyHint ?? 'Group này không cho phép emoji này')
+      return
+    }
+
+    setReactingId(msg.id)
+    resetAlerts()
+    try {
+      const res = await api.sendReaction(phone, selected.id, msg.id, emoji)
+      if (!res.success || !res.data) {
+        setError(res.error ?? 'Thả reaction thất bại')
+        return
+      }
+      if (res.data.status === 'error') {
+        setError(res.data.message)
+        return
+      }
+      setSuccess(res.data.message)
+      await loadMessages(selected, false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không kết nối được API.')
+    } finally {
+      setReactingId(null)
+    }
   }
 
   async function handleDeleteMessage(msg: DialogMessageItem) {
@@ -1077,7 +1128,6 @@ export function DialogsPage() {
                         (msg.has_media && msg.text === '[photo]')
                       const displayText =
                         isPhoto && (msg.text === '[photo]' || !msg.text) ? '' : msg.text
-
                       return (
                         <li
                           key={msg.id}
@@ -1142,6 +1192,13 @@ export function DialogsPage() {
                                 {mediaTypeLabel(msg.content_type)}
                               </span>
                             )}
+                            <MessageReactionBar
+                              msg={msg}
+                              reactionsPolicy={reactionsPolicy}
+                              reactingId={reactingId}
+                              sending={sending}
+                              onReact={handleSendReaction}
+                            />
                             <div className="message-actions">
                               <button
                                 type="button"

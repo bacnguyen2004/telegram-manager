@@ -2,6 +2,8 @@ from fastapi import APIRouter, File, Form, Query, UploadFile
 
 from ..schemas.common import ApiEnvelope
 from ..schemas.messages import (
+    ReactMessageData,
+    ReactMessageRequest,
     ReplyMessageRequest,
     SendMessageData,
     SendMessageRequest,
@@ -81,6 +83,29 @@ async def send_media(
         reply_to_msg_id=reply_to_msg_id,
     )
     data = SendMessageData(**result)
+    return success_response(data.model_dump())
+
+
+@router.post("/react", response_model=ApiEnvelope[ReactMessageData])
+async def send_reaction(payload: ReactMessageRequest) -> dict:
+    result = await telegram_message_service.send_reaction(
+        payload.phone,
+        payload.peer_id,
+        payload.message_id,
+        payload.emoji,
+    )
+    data = ReactMessageData(**result)
+    return success_response(data.model_dump())
+
+
+@router.delete("/react", response_model=ApiEnvelope[ReactMessageData])
+async def remove_reaction(
+    phone: str = Query(..., description="So dien thoai session"),
+    peer_id: str = Query(..., description="Dialog id hoac username"),
+    message_id: int = Query(..., ge=1, description="ID tin nhan"),
+) -> dict:
+    result = await telegram_message_service.remove_reaction(phone, peer_id, message_id)
+    data = ReactMessageData(**result)
     return success_response(data.model_dump())
 
 

@@ -39,6 +39,19 @@ class DialogsData(BaseModel):
     message: str = ""
 
 
+class DialogReactionsPolicy(BaseModel):
+    enabled: bool = True
+    mode: Literal["all", "some", "none"] = "all"
+    allowed_emojis: list[str] = Field(default_factory=list)
+    has_custom: bool = False
+
+
+class DialogMessageReactionItem(BaseModel):
+    emoji: str
+    count: int = 0
+    chosen: bool = False
+
+
 class DialogMessageItem(BaseModel):
     id: int
     date: str
@@ -49,6 +62,7 @@ class DialogMessageItem(BaseModel):
     has_media: bool
     has_photo: bool = False
     text: str
+    reactions: list[DialogMessageReactionItem] = []
 
 
 class DialogMessagesData(BaseModel):
@@ -59,6 +73,9 @@ class DialogMessagesData(BaseModel):
     total: int
     messages: list[DialogMessageItem]
     has_more_older: bool = False
+    reactions_policy: DialogReactionsPolicy = Field(
+        default_factory=DialogReactionsPolicy
+    )
     message: str = ""
 
 

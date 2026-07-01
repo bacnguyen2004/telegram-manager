@@ -194,6 +194,107 @@ def test_send_media_rejects_non_image(client):
     assert "JPEG" in data["message"]
 
 
+async def test_send_reaction_success(client, monkeypatch):
+    async def mock_send_reaction(
+        phone: str, peer_id: str, message_id: int, emoji: str
+    ) -> dict:
+        return {
+            "status": "success",
+            "phone": phone,
+            "peer_id": peer_id,
+            "message_id": message_id,
+            "reply_to_msg_id": None,
+            "emoji": emoji,
+            "message": "Da them reaction",
+        }
+
+    monkeypatch.setattr(
+        messages.telegram_message_service,
+        "send_reaction",
+        mock_send_reaction,
+    )
+
+    response = client.post(
+        "/api/messages/react",
+        json={
+            "phone": "+84901234567",
+            "peer_id": "123456789",
+            "message_id": 42,
+            "emoji": "👍",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "success"
+    assert data["emoji"] == "👍"
+    assert data["message_id"] == 42
+
+
+async def test_send_reaction_not_allowed(client, monkeypatch):
+    async def mock_send_reaction(
+        phone: str, peer_id: str, message_id: int, emoji: str
+    ) -> dict:
+        return {
+            "status": "error",
+            "phone": phone,
+            "peer_id": peer_id,
+            "message_id": message_id,
+            "reply_to_msg_id": None,
+            "emoji": None,
+            "message": "Group nay khong cho phep emoji nay. Duoc phep: 👍 ❤️",
+        }
+
+    monkeypatch.setattr(
+        messages.telegram_message_service,
+        "send_reaction",
+        mock_send_reaction,
+    )
+
+    response = client.post(
+        "/api/messages/react",
+        json={
+            "phone": "+84901234567",
+            "peer_id": "123456789",
+            "message_id": 42,
+            "emoji": "🔥",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "error"
+    assert "khong cho phep" in data["message"].lower()
+
+
+async def test_remove_reaction_success(client, monkeypatch):
+    async def mock_remove_reaction(phone: str, peer_id: str, message_id: int) -> dict:
+        return {
+            "status": "success",
+            "phone": phone,
+            "peer_id": peer_id,
+            "message_id": message_id,
+            "reply_to_msg_id": None,
+            "emoji": None,
+            "message": "Da xoa reaction",
+        }
+
+    monkeypatch.setattr(
+        messages.telegram_message_service,
+        "remove_reaction",
+        mock_remove_reaction,
+    )
+
+    response = client.delete(
+        "/api/messages/react?phone=%2B84901234567&peer_id=123456789&message_id=42",
+    )
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == "success"
+    assert data["emoji"] is None
+
+
 def test_send_message_validation_empty_text(client):
     response = client.post(
         "/api/messages/send",

@@ -7,6 +7,7 @@ from telethon.errors import FloodWaitError
 
 from ...config import settings
 from .client import telethon_session
+from .reactions import default_reactions_policy, fetch_peer_reactions_policy
 
 
 class TelegramDialogService:
@@ -162,6 +163,7 @@ class TelegramDialogService:
                     )
 
                 entity = await self._resolve_peer(client, peer_ref)
+                reactions_policy = await fetch_peer_reactions_policy(client, entity)
                 fetch_kwargs: dict = {"limit": limit}
                 if offset_id > 0:
                     fetch_kwargs["offset_id"] = offset_id
@@ -197,6 +199,7 @@ class TelegramDialogService:
                             "has_media": bool(message.media),
                             "has_photo": has_photo,
                             "text": text[:2000],
+                            "reactions": self._format_reactions(message),
                         }
                     )
 
@@ -215,6 +218,7 @@ class TelegramDialogService:
                     "messages": rows,
                     "total": len(rows),
                     "has_more_older": len(messages) >= limit,
+                    "reactions_policy": reactions_policy,
                     "message": "OK",
                 }
         except FloodWaitError as exc:
@@ -468,6 +472,31 @@ class TelegramDialogService:
         return False
 
     @staticmethod
+    def _format_reactions(message) -> list[dict]:
+        reactions_obj = getattr(message, "reactions", None)
+        if not reactions_obj:
+            return []
+
+        rows: list[dict] = []
+        for item in getattr(reactions_obj, "results", None) or []:
+            reaction = getattr(item, "reaction", None)
+            emoji = ""
+            if reaction is not None and hasattr(reaction, "emoticon"):
+                emoji = reaction.emoticon or ""
+            elif reaction is not None and hasattr(reaction, "document_id"):
+                emoji = f"custom:{reaction.document_id}"
+            if not emoji:
+                continue
+            rows.append(
+                {
+                    "emoji": emoji,
+                    "count": int(getattr(item, "count", 0) or 0),
+                    "chosen": getattr(item, "chosen_order", None) is not None,
+                }
+            )
+        return rows
+
+    @staticmethod
     def _message_content_type(message) -> str:
         if getattr(message, "photo", None):
             return "photo"
@@ -510,6 +539,7 @@ class TelegramDialogService:
             "total": 0,
             "messages": [],
             "has_more_older": False,
+            "reactions_policy": default_reactions_policy(),
             "message": message,
         }
 

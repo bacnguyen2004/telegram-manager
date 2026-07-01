@@ -213,6 +213,19 @@ export interface DialogsData {
   message: string
 }
 
+export interface DialogReactionsPolicy {
+  enabled: boolean
+  mode: 'all' | 'some' | 'none'
+  allowed_emojis: string[]
+  has_custom: boolean
+}
+
+export interface DialogMessageReactionItem {
+  emoji: string
+  count: number
+  chosen: boolean
+}
+
 export interface DialogMessageItem {
   id: number
   date: string
@@ -223,6 +236,17 @@ export interface DialogMessageItem {
   has_media: boolean
   has_photo: boolean
   text: string
+  reactions: DialogMessageReactionItem[]
+}
+
+export interface ReactMessageData {
+  status: 'success' | 'error'
+  phone: string
+  peer_id: string
+  message_id: number | null
+  reply_to_msg_id: number | null
+  emoji: string | null
+  message: string
 }
 
 export interface DialogMessagesData {
@@ -233,6 +257,7 @@ export interface DialogMessagesData {
   total: number
   messages: DialogMessageItem[]
   has_more_older: boolean
+  reactions_policy: DialogReactionsPolicy
   message: string
 }
 
