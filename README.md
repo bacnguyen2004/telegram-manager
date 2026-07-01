@@ -25,7 +25,7 @@ telegram-manager/
 ### Điểm nổi bật (CV / portfolio)
 
 - Thiết kế **session lock** hai lớp (`asyncio` + file lock) — an toàn khi nhiều request/worker cùng mở file `.session` Telethon
-- **24 REST endpoint** với response envelope chuẩn, OpenAPI/Swagger tự động
+- **31 REST endpoint** với response envelope chuẩn, OpenAPI/Swagger tự động
 - Dashboard chat: pagination tin cũ, scroll tới tin đã đọc, badge unread, gửi/reply/ảnh/xóa
 - **PostgreSQL metadata** (SQLModel): login history, group scan, audit log — tách khỏi session Telethon trên disk
 - **Docker Compose** full-stack (API + web + Postgres), CI pytest + vitest trên GitHub Actions
@@ -48,6 +48,12 @@ telegram-manager/
 | Dashboard | Dialogs — chat UI | Sessions |
 |-----------|-------------------|----------|
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Dialogs](docs/screenshots/dialogs.png) | ![Sessions](docs/screenshots/sessions.png) |
+
+| Tasks — bulk automation | Audit — nhật ký DB | Groups |
+|-------------------------|--------------------|--------|
+| ![Tasks](docs/screenshots/tasks.png) | ![Audit](docs/screenshots/audit.png) | ![Groups](docs/screenshots/groups.png) |
+
+> Chụp thêm ảnh Tasks / Audit / Groups: `docker compose up` + `npm run dev` → mở `/tasks`, `/audit`, `/groups` → lưu PNG vào `docs/screenshots/`.
 
 ---
 
@@ -87,7 +93,9 @@ docker compose up --build
 | **Sessions** | Liệt kê, kiểm tra live, chi tiết file + DB metadata, xóa |
 | **Groups** | Join/leave nhóm & channel, leave-all, danh sách nhóm |
 | **Dialogs** | Danh sách chat, đọc tin, mark-read, tải ảnh thumbnail |
-| **Messages** | Gửi text, reply, gửi ảnh (multipart), xóa tin |
+| **Messages** | Gửi text, reply, gửi ảnh (multipart), reaction, poll/vote |
+| **Tasks** | Bulk automation — react, vote, join, reply, pipeline nhiều acc |
+| **Metadata** | `session_meta`, `group_scans`, `audit_logs` (PostgreSQL) |
 | **Health** | Trạng thái backend, Telegram config, database, session dir |
 
 ---
@@ -128,12 +136,14 @@ Mỗi `phone` map tới một file `.session` (SQLite). Telethon không an toàn
 | `/sessions` | Quản lý session |
 | `/dialogs` | Chat workspace |
 | `/groups` | Join / leave / list nhóm |
+| `/tasks` | Tác vụ hàng loạt (bulk) |
+| `/audit` | Nhật ký audit + lịch sử quét nhóm |
 | `/security` | 2FA, privacy |
 | `/health` | Health check |
 
 ---
 
-## API (24 endpoints)
+## API (31 endpoints)
 
 Response chuẩn: `{ "success": true|false, "data": ..., "error": null|"..." }`
 
@@ -181,7 +191,27 @@ Response chuẩn: `{ "success": true|false, "data": ..., "error": null|"..." }`
 | POST | `/api/messages/send` | Gửi text |
 | POST | `/api/messages/reply` | Trả lời tin |
 | POST | `/api/messages/send-media` | Gửi ảnh (multipart) |
+| POST | `/api/messages/react` | Reaction tin |
+| DELETE | `/api/messages/react` | Gỡ reaction |
+| GET | `/api/messages/poll` | Thông tin poll / to-do |
+| POST | `/api/messages/vote` | Vote poll |
+| POST | `/api/messages/vote/cancel` | Hủy vote |
+| POST | `/api/messages/poll/add-option` | Thêm đáp án poll |
 | DELETE | `/api/messages/{message_id}` | Xóa tin |
+
+</details>
+
+<details>
+<summary><strong>Metadata (PostgreSQL)</strong></summary>
+
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| GET | `/api/metadata/overview` | Tổng quan session meta / audit / scans |
+| GET | `/api/metadata/audit` | Danh sách audit log (`phone`, `limit`, `offset`) |
+| GET | `/api/metadata/group-scans` | Lịch sử quét nhóm theo acc |
+| GET | `/api/metadata/sessions` | Session meta + lần quét nhóm gần nhất |
+
+> Cần `DATABASE_URL` trong `backend/.env`. Dev local có thể dùng SQLite; Docker dùng PostgreSQL.
 
 </details>
 

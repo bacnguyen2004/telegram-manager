@@ -5,7 +5,8 @@ import { Alert } from '../components/Alert'
 import { Pagination } from '../components/Pagination'
 import { PhoneSelect } from '../components/PhoneSelect'
 import { usePagination } from '../hooks/usePagination'
-import type { GroupItem } from '../types/api'
+import type { GroupItem, GroupScanItem } from '../types/api'
+import { formatDate } from '../utils/format'
 
 type KindFilter = 'all' | 'group' | 'channel'
 type VisibilityFilter = 'all' | 'public' | 'private'
@@ -81,6 +82,8 @@ export function GroupsPage() {
   const [leaveAllLoading, setLeaveAllLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [scanHistory, setScanHistory] = useState<GroupScanItem[]>([])
+  const [scanHistoryLoading, setScanHistoryLoading] = useState(false)
 
   const filterCounts = useMemo(() => {
     let group = 0
@@ -141,6 +144,33 @@ export function GroupsPage() {
     return () => window.clearTimeout(timer)
   }, [success])
 
+  useEffect(() => {
+    if (!phone) {
+      setScanHistory([])
+      return
+    }
+    let cancelled = false
+    setScanHistoryLoading(true)
+    void (async () => {
+      try {
+        const res = await api.listGroupScans(phone, 5)
+        if (cancelled) return
+        if (res.success && res.data?.database_enabled) {
+          setScanHistory(res.data.items)
+        } else {
+          setScanHistory([])
+        }
+      } catch {
+        if (!cancelled) setScanHistory([])
+      } finally {
+        if (!cancelled) setScanHistoryLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [phone, groups.length])
+
   function resetAlerts() {
     setError('')
     setSuccess('')
@@ -192,6 +222,10 @@ export function GroupsPage() {
       }
       setGroups(res.data.groups)
       setSuccess(`Quét xong — ${res.data.total} mục`)
+      const scanRes = await api.listGroupScans(phone, 5)
+      if (scanRes.success && scanRes.data?.database_enabled) {
+        setScanHistory(scanRes.data.items)
+      }
     } catch {
       setError('Không kết nối được API.')
     } finally {
@@ -328,6 +362,33 @@ export function GroupsPage() {
               {loading ? 'Đang quét…' : hasData ? 'Quét lại' : 'Quét danh sách'}
             </button>
           </form>
+
+          {phone ? (
+            <div className="groups-scan-history">
+              <p className="groups-control-label">Lịch sử quét (DB)</p>
+              {scanHistoryLoading ? (
+                <p className="muted">Đang tải…</p>
+              ) : scanHistory.length === 0 ? (
+                <p className="muted">
+                  Chưa có bản ghi — bấm <strong>Quét danh sách</strong> để lưu vào DB.
+                </p>
+              ) : (
+                <ul className="groups-scan-history-list">
+                  {scanHistory.map((scan) => (
+                    <li key={scan.id}>
+                      <span>
+                        {scan.group_count} nhóm · {scan.channel_count} kênh
+                      </span>
+                      <span className="muted">{formatDate(scan.scanned_at)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <Link to={`/audit?phone=${encodeURIComponent(phone)}`} className="groups-audit-link">
+                Xem audit acc này →
+              </Link>
+            </div>
+          ) : null}
 
           <div className="groups-control-section">
             <p className="groups-control-label">Sắp xếp danh sách</p>

@@ -7,6 +7,7 @@ interface PhoneSelectProps {
   allowManual?: boolean
   required?: boolean
   label?: string
+  emptyOptionLabel?: string
 }
 
 export function PhoneSelect({
@@ -15,7 +16,9 @@ export function PhoneSelect({
   allowManual = true,
   required = true,
   label = 'Chọn tài khoản',
+  emptyOptionLabel,
 }: PhoneSelectProps) {
+  const emptyLabel = emptyOptionLabel ?? (required ? '— Chọn số điện thoại —' : 'Tất cả acc')
   const [sessions, setSessions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -49,7 +52,7 @@ export function PhoneSelect({
       <label className="field">
         <span>{label}</span>
         <select value={value} onChange={(e) => onChange(e.target.value)} required={required}>
-          <option value="">— Chọn số điện thoại —</option>
+          <option value="">{emptyLabel}</option>
           {sessions.map((phone) => (
             <option key={phone} value={phone}>
               {phone}

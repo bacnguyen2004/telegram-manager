@@ -22,7 +22,10 @@ const navSections = [
   },
   {
     label: 'Hệ thống',
-    items: [{ to: '/health', label: 'Health', end: false }],
+    items: [
+      { to: '/audit', label: 'Audit', end: false },
+      { to: '/health', label: 'Health', end: false },
+    ],
   },
 ]
 
@@ -33,6 +36,7 @@ function pageTitle(pathname: string): string {
     '/groups': 'Groups',
     '/dialogs': 'Dialogs',
     '/tasks': 'Tasks',
+    '/audit': 'Audit log',
     '/health': 'Health',
     '/auth': 'Tài khoản',
     '/security': 'Bảo mật',
@@ -106,7 +110,7 @@ export function Layout() {
           <p className="topbar-title">{pageTitle(pathname)}</p>
           <div className="topbar-actions">
             <ThemeToggle />
-            <div className="topbar-pill">23 endpoints</div>
+            <div className="topbar-pill">31 endpoints</div>
           </div>
         </header>
         <main className="main">

@@ -188,6 +188,203 @@ class MetadataStore:
 
         self._run("remove_session_meta", _write)
 
+    def list_audit_logs(
+        self,
+        *,
+        phone: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        if not settings.database_enabled:
+            return {
+                "database_enabled": False,
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "items": [],
+            }
+
+        phone = (phone or "").strip() or None
+        limit = max(1, min(limit, 200))
+        offset = max(0, offset)
+
+        try:
+            with self._session() as session:
+                statement = select(AuditLog)
+                if phone:
+                    statement = statement.where(AuditLog.phone == phone)
+                statement = statement.order_by(AuditLog.created_at.desc())
+
+                rows = session.exec(statement).all()
+                total = len(rows)
+                page = rows[offset : offset + limit]
+
+                return {
+                    "database_enabled": True,
+                    "total": total,
+                    "limit": limit,
+                    "offset": offset,
+                    "items": [
+                        {
+                            "id": item.id,
+                            "phone": item.phone,
+                            "action": item.action,
+                            "resource": item.resource,
+                            "status": item.status,
+                            "detail": item.detail,
+                            "created_at": _iso(item.created_at),
+                        }
+                        for item in page
+                        if item.id is not None
+                    ],
+                }
+        except Exception:
+            logger.exception("MetadataStore.list_audit_logs failed")
+            return {
+                "database_enabled": True,
+                "total": 0,
+                "limit": limit,
+                "offset": offset,
+                "items": [],
+            }
+
+    def list_group_scans(
+        self,
+        *,
+        phone: str | None = None,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        if not settings.database_enabled:
+            return {"database_enabled": False, "total": 0, "limit": limit, "items": []}
+
+        phone = (phone or "").strip() or None
+        limit = max(1, min(limit, 100))
+
+        try:
+            with self._session() as session:
+                statement = select(GroupScan)
+                if phone:
+                    statement = statement.where(GroupScan.phone == phone)
+                statement = statement.order_by(GroupScan.scanned_at.desc())
+
+                rows = session.exec(statement).all()
+                total = len(rows)
+                page = rows[:limit]
+
+                return {
+                    "database_enabled": True,
+                    "total": total,
+                    "limit": limit,
+                    "items": [
+                        {
+                            "id": item.id,
+                            "phone": item.phone,
+                            "total": item.total,
+                            "group_count": item.group_count,
+                            "channel_count": item.channel_count,
+                            "scanned_at": _iso(item.scanned_at),
+                        }
+                        for item in page
+                        if item.id is not None
+                    ],
+                }
+        except Exception:
+            logger.exception("MetadataStore.list_group_scans failed")
+            return {"database_enabled": True, "total": 0, "limit": limit, "items": []}
+
+    def list_session_meta_overview(self) -> dict[str, Any]:
+        if not settings.database_enabled:
+            return {"database_enabled": False, "total": 0, "items": []}
+
+        try:
+            with self._session() as session:
+                metas = session.exec(
+                    select(SessionMeta).order_by(SessionMeta.phone.asc())
+                ).all()
+                items: list[dict[str, Any]] = []
+                for meta in metas:
+                    last_scan = session.exec(
+                        select(GroupScan)
+                        .where(GroupScan.phone == meta.phone)
+                        .order_by(GroupScan.scanned_at.desc())
+                        .limit(1)
+                    ).first()
+                    items.append(
+                        {
+                            "phone": meta.phone,
+                            "username": meta.username,
+                            "display_name": meta.display_name,
+                            "status": meta.status,
+                            "source": meta.source,
+                            "last_synced_at": _iso(meta.last_synced_at),
+                            "last_group_scan": (
+                                {
+                                    "total": last_scan.total,
+                                    "group_count": last_scan.group_count,
+                                    "channel_count": last_scan.channel_count,
+                                    "scanned_at": _iso(last_scan.scanned_at),
+                                }
+                                if last_scan
+                                else None
+                            ),
+                        }
+                    )
+                return {
+                    "database_enabled": True,
+                    "total": len(items),
+                    "items": items,
+                }
+        except Exception:
+            logger.exception("MetadataStore.list_session_meta_overview failed")
+            return {"database_enabled": True, "total": 0, "items": []}
+
+    def get_overview(self) -> dict[str, Any]:
+        if not settings.database_enabled:
+            return {
+                "database_enabled": False,
+                "session_meta_count": 0,
+                "audit_log_count": 0,
+                "group_scan_count": 0,
+                "recent_audit": [],
+            }
+
+        try:
+            with self._session() as session:
+                session_meta_count = len(session.exec(select(SessionMeta)).all())
+                audit_log_count = len(session.exec(select(AuditLog)).all())
+                group_scan_count = len(session.exec(select(GroupScan)).all())
+                recent = session.exec(
+                    select(AuditLog).order_by(AuditLog.created_at.desc()).limit(10)
+                ).all()
+                return {
+                    "database_enabled": True,
+                    "session_meta_count": session_meta_count,
+                    "audit_log_count": audit_log_count,
+                    "group_scan_count": group_scan_count,
+                    "recent_audit": [
+                        {
+                            "id": item.id,
+                            "phone": item.phone,
+                            "action": item.action,
+                            "resource": item.resource,
+                            "status": item.status,
+                            "detail": item.detail,
+                            "created_at": _iso(item.created_at),
+                        }
+                        for item in recent
+                        if item.id is not None
+                    ],
+                }
+        except Exception:
+            logger.exception("MetadataStore.get_overview failed")
+            return {
+                "database_enabled": True,
+                "session_meta_count": 0,
+                "audit_log_count": 0,
+                "group_scan_count": 0,
+                "recent_audit": [],
+            }
+
     def get_session_snapshot(self, phone: str) -> dict[str, Any] | None:
         if not settings.database_enabled:
             return None

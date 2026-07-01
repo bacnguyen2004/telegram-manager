@@ -46,6 +46,15 @@ const apiMap = [
     ],
   },
   {
+    group: 'Metadata',
+    items: [
+      { method: 'GET', path: '/api/metadata/overview', page: '/audit' },
+      { method: 'GET', path: '/api/metadata/audit', page: '/audit' },
+      { method: 'GET', path: '/api/metadata/group-scans', page: '/audit' },
+      { method: 'GET', path: '/api/metadata/sessions', page: '/sessions' },
+    ],
+  },
+  {
     group: 'Auth',
     items: [
       { method: 'POST', path: '/api/auth/send-code', page: '/auth' },
@@ -114,6 +123,23 @@ const quickLinks = [
         <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
         <circle cx="17" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.8" />
         <path d="M3 19c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    to: '/audit',
+    label: 'Audit',
+    desc: 'Nhật ký login, join, quét nhóm',
+    accent: 'violet',
+    icon: (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
+        <path
+          d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"
+          stroke="currentColor"
+          strokeWidth="1.8"
+        />
+        <rect x="9" y="3" width="6" height="4" rx="1" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M9 12h6M9 16h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     ),
   },

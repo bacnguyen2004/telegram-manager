@@ -1,5 +1,6 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
+import { AuditPage } from './pages/AuditPage'
 import { AuthPage } from './pages/AuthPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { DialogsPage } from './pages/DialogsPage'
@@ -19,6 +20,7 @@ export const appRouter = createBrowserRouter([
       { path: 'groups', element: <GroupsPage /> },
       { path: 'dialogs', element: <DialogsPage /> },
       { path: 'tasks', element: <TasksPage /> },
+      { path: 'audit', element: <AuditPage /> },
       { path: 'health', element: <HealthPage /> },
       { path: 'auth', element: <AuthPage /> },
       { path: 'security', element: <SecurityPage /> },

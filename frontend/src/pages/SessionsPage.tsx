@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
 import { Pagination } from '../components/Pagination'
 import { StatusBadge } from '../components/StatusBadge'
 import { usePagination } from '../hooks/usePagination'
-import type { CheckSessionItem, SessionDetailData, SessionMeData } from '../types/api'
+import type {
+  CheckSessionItem,
+  SessionDetailData,
+  SessionMeData,
+  SessionMetaOverviewItem,
+} from '../types/api'
+import { auditActionLabel } from '../utils/auditLabels'
 import { formatBytes, formatDate } from '../utils/format'
 
 function calcStats(results: CheckSessionItem[]) {
@@ -30,6 +37,22 @@ export function SessionsPage() {
   const [detailData, setDetailData] = useState<SessionDetailData | null>(null)
   const [meData, setMeData] = useState<SessionMeData | null>(null)
   const [modalLoading, setModalLoading] = useState(false)
+  const [metaByPhone, setMetaByPhone] = useState<Map<string, SessionMetaOverviewItem>>(
+    new Map(),
+  )
+
+  const loadMetadata = useCallback(async () => {
+    try {
+      const res = await api.listSessionMetaOverview()
+      if (!res.success || !res.data?.database_enabled) {
+        setMetaByPhone(new Map())
+        return
+      }
+      setMetaByPhone(new Map(res.data.items.map((item) => [item.phone, item])))
+    } catch {
+      setMetaByPhone(new Map())
+    }
+  }, [])
 
   const loadSessions = useCallback(async () => {
     setLoading(true)
@@ -51,7 +74,8 @@ export function SessionsPage() {
 
   useEffect(() => {
     void loadSessions()
-  }, [loadSessions])
+    void loadMetadata()
+  }, [loadSessions, loadMetadata])
 
   async function handleCheckAll() {
     setChecking(true)
@@ -69,6 +93,7 @@ export function SessionsPage() {
         unauthorized: res.data.unauthorized,
         error: res.data.error,
       })
+      void loadMetadata()
     } catch {
       setError('Không kết nối được API khi kiểm tra session.')
     } finally {
@@ -267,12 +292,15 @@ export function SessionsPage() {
                   <th>Số điện thoại</th>
                   <th>Trạng thái</th>
                   <th>Username</th>
+                  <th>Nhóm / kênh</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {pagedSessions.map((phone) => {
                   const checked = resultByPhone.get(phone)
+                  const meta = metaByPhone.get(phone)
+                  const scan = meta?.last_group_scan
                   const isDeleting = deletingPhone === phone
                   const isChecking = checkingPhone === phone
                   return (
@@ -287,7 +315,16 @@ export function SessionsPage() {
                           <span className="muted">Chưa kiểm tra</span>
                         )}
                       </td>
-                      <td>{checked?.username ?? '—'}</td>
+                      <td>{checked?.username ?? meta?.username ?? '—'}</td>
+                      <td>
+                        {scan ? (
+                          <span className="session-scan-summary" title={formatDate(scan.scanned_at)}>
+                            {scan.group_count} nhóm · {scan.channel_count} kênh
+                          </span>
+                        ) : (
+                          <span className="muted">—</span>
+                        )}
+                      </td>
                       <td className="cell-actions">
                         <button
                           type="button"
@@ -399,6 +436,51 @@ export function SessionsPage() {
                       {detailData.db_metadata.last_error && (
                         <p className="detail-message">{detailData.db_metadata.last_error}</p>
                       )}
+                      {detailData.db_metadata.last_group_scan ? (
+                        <>
+                          <h4 className="modal-section-title">Quét nhóm gần nhất</h4>
+                          <div className="detail-row">
+                            <span>Tổng</span>
+                            <strong>{detailData.db_metadata.last_group_scan.total}</strong>
+                          </div>
+                          <div className="detail-row">
+                            <span>Nhóm / kênh</span>
+                            <strong>
+                              {detailData.db_metadata.last_group_scan.group_count} /{' '}
+                              {detailData.db_metadata.last_group_scan.channel_count}
+                            </strong>
+                          </div>
+                          <div className="detail-row">
+                            <span>Lúc</span>
+                            <strong>
+                              {formatDate(detailData.db_metadata.last_group_scan.scanned_at)}
+                            </strong>
+                          </div>
+                        </>
+                      ) : null}
+                      {detailData.db_metadata.recent_audit.length > 0 ? (
+                        <>
+                          <h4 className="modal-section-title">Audit gần đây</h4>
+                          <ul className="session-audit-list">
+                            {detailData.db_metadata.recent_audit.map((item) => (
+                              <li key={`${item.action}-${item.created_at}`}>
+                                <span className="session-audit-action">
+                                  {auditActionLabel(item.action)}
+                                </span>
+                                <span className="muted">{formatDate(item.created_at)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                          {selectedPhone ? (
+                            <Link
+                              to={`/audit?phone=${encodeURIComponent(selectedPhone)}`}
+                              className="session-audit-link"
+                            >
+                              Xem toàn bộ audit →
+                            </Link>
+                          ) : null}
+                        </>
+                      ) : null}
                     </>
                   ) : (
                     <p className="muted">

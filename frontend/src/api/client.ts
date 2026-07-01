@@ -13,8 +13,12 @@ import type {
   GroupActionData,
   GroupsData,
   LeaveAllGroupsData,
+  AuditLogsData,
+  GroupScansData,
   HealthData,
   LoginCodeData,
+  MetadataOverviewData,
+  SessionMetaOverviewData,
   LoginData,
   PrivacyRuleType,
   RegisterData,
@@ -380,6 +384,29 @@ export const api = {
     if (caption) form.append('caption', caption)
     if (replyToMsgId) form.append('reply_to_msg_id', String(replyToMsgId))
     return requestForm<SendMessageData>('/messages/send-media', form)
+  },
+
+  metadataOverview() {
+    return request<MetadataOverviewData>('/metadata/overview')
+  },
+
+  listAuditLogs(phone?: string, limit = 50, offset = 0) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+    })
+    if (phone?.trim()) params.set('phone', phone.trim())
+    return request<AuditLogsData>(`/metadata/audit?${params}`)
+  },
+
+  listGroupScans(phone?: string, limit = 20) {
+    const params = new URLSearchParams({ limit: String(limit) })
+    if (phone?.trim()) params.set('phone', phone.trim())
+    return request<GroupScansData>(`/metadata/group-scans?${params}`)
+  },
+
+  listSessionMetaOverview() {
+    return request<SessionMetaOverviewData>('/metadata/sessions')
   },
 
 }

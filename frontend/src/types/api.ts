@@ -339,3 +339,61 @@ export interface SendMessageData {
   message: string
 }
 
+export interface AuditLogItem {
+  id: number
+  phone: string
+  action: string
+  resource: string | null
+  status: string
+  detail: string | null
+  created_at: string
+}
+
+export interface AuditLogsData {
+  database_enabled: boolean
+  total: number
+  limit: number
+  offset: number
+  items: AuditLogItem[]
+}
+
+export interface GroupScanItem {
+  id: number
+  phone: string
+  total: number
+  group_count: number
+  channel_count: number
+  scanned_at: string
+}
+
+export interface GroupScansData {
+  database_enabled: boolean
+  total: number
+  limit: number
+  items: GroupScanItem[]
+}
+
+export interface SessionMetaOverviewItem {
+  phone: string
+  username: string | null
+  display_name: string | null
+  status: string
+  source: string
+  last_synced_at: string | null
+  last_group_scan: SessionGroupScanSummary | null
+}
+
+export interface SessionMetaOverviewData {
+  database_enabled: boolean
+  total: number
+  items: SessionMetaOverviewItem[]
+}
+
+export interface MetadataOverviewData {
+  database_enabled: boolean
+  session_meta_count: number
+  audit_log_count: number
+  group_scan_count: number
+  recent_audit: AuditLogItem[]
+}
+

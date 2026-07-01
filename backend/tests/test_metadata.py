@@ -111,6 +111,46 @@ def test_record_group_scan_and_snapshot():
         assert len(scans) == 1
 
 
+def test_list_audit_logs_and_group_scans(client):
+    phone = "+84901230000"
+    metadata_store.record_login(
+        phone,
+        telegram_user_id=42,
+        username="audit_user",
+        first_name="Audit",
+        last_name="User",
+    )
+    metadata_store.record_group_scan(
+        phone,
+        [{"is_channel": False, "title": "G1"}, {"is_channel": True, "title": "C1"}],
+    )
+
+    audit_res = client.get("/api/metadata/audit", params={"phone": phone, "limit": 10})
+    assert audit_res.status_code == 200
+    audit_body = audit_res.json()
+    assert audit_body["success"] is True
+    assert audit_body["data"]["database_enabled"] is True
+    assert audit_body["data"]["total"] >= 2
+    assert any(item["action"] == "auth.login" for item in audit_body["data"]["items"])
+
+    scan_res = client.get("/api/metadata/group-scans", params={"phone": phone, "limit": 5})
+    assert scan_res.status_code == 200
+    scan_body = scan_res.json()
+    assert scan_body["success"] is True
+    assert scan_body["data"]["items"][0]["total"] == 2
+
+    overview_res = client.get("/api/metadata/overview")
+    assert overview_res.status_code == 200
+    overview_body = overview_res.json()
+    assert overview_body["data"]["session_meta_count"] >= 1
+    assert overview_body["data"]["audit_log_count"] >= 2
+
+    sessions_res = client.get("/api/metadata/sessions")
+    assert sessions_res.status_code == 200
+    sessions_body = sessions_res.json()
+    assert any(item["phone"] == phone for item in sessions_body["data"]["items"])
+
+
 def test_remove_session_meta_keeps_audit_history():
     phone = "+84907654321"
     metadata_store.sync_session(
