@@ -207,11 +207,21 @@ class TelegramSessionService:
                 phone, self.api_id, self.api_hash, self.session_dir
             ) as client:
                 if not await client.is_user_authorized():
+                    message = "Session chua dang nhap hoac da het han"
+                    metadata_store.sync_session(
+                        phone,
+                        telegram_user_id=None,
+                        username=None,
+                        display_name=None,
+                        status="unauthorized",
+                        source="imported",
+                        last_error=message,
+                    )
                     return self._result(
                         phone,
                         "unauthorized",
                         str(session_file),
-                        message="Session chua dang nhap hoac da het han",
+                        message=message,
                     )
 
                 me = await client.get_me()
@@ -220,6 +230,16 @@ class TelegramSessionService:
                 message = f"Live: {display or phone}"
                 if username:
                     message += f" (@{username})"
+
+                metadata_store.sync_session(
+                    phone,
+                    telegram_user_id=me.id,
+                    username=username,
+                    display_name=display or None,
+                    status="active",
+                    source="imported",
+                    last_error=None,
+                )
 
                 return {
                     "phone": phone,
@@ -230,13 +250,32 @@ class TelegramSessionService:
                     "message": message,
                 }
         except FloodWaitError as exc:
+            message = f"Flood wait {exc.seconds}s"
+            metadata_store.sync_session(
+                phone,
+                telegram_user_id=None,
+                username=None,
+                display_name=None,
+                status="error",
+                source="imported",
+                last_error=message,
+            )
             return self._result(
                 phone,
                 "error",
                 str(session_file),
-                message=f"Flood wait {exc.seconds}s",
+                message=message,
             )
         except Exception as exc:
+            metadata_store.sync_session(
+                phone,
+                telegram_user_id=None,
+                username=None,
+                display_name=None,
+                status="error",
+                source="imported",
+                last_error=str(exc),
+            )
             return self._result(phone, "error", str(session_file), message=str(exc))
 
     def _pending_auth_path(self, phone: str) -> Path:

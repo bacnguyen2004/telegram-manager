@@ -16,9 +16,15 @@ class SessionMeta(SQLModel, table=True):
     telegram_user_id: int | None = Field(default=None, index=True)
     username: str | None = Field(default=None, max_length=64)
     display_name: str | None = Field(default=None, max_length=128)
-    first_login_at: datetime = Field(default_factory=utc_now)
-    last_login_at: datetime = Field(default_factory=utc_now)
-    login_count: int = Field(default=0, ge=0)
+    source: str = Field(default="imported", max_length=16)       # imported | otp_login
+    status: str = Field(default="unknown", max_length=16)          # active | unauthorized | error | unknown
+    imported_at: datetime = Field(default_factory=utc_now)
+    last_synced_at: datetime | None = Field(default=None)
+    last_error: str | None = Field(default=None, max_length=500)
+
+    has_avatar: bool = Field(default=False)
+    avatar_path: str | None = Field(default=None, max_length=256)
+    avatar_updated_at: datetime | None = Field(default=None)
 
 
 class GroupScan(SQLModel, table=True):

@@ -60,9 +60,14 @@ class SessionDbMetadata(BaseModel):
     telegram_user_id: int | None = None
     username: str | None = None
     display_name: str | None = None
-    first_login_at: str | None = None
-    last_login_at: str | None = None
-    login_count: int = 0
+    source: str = "imported"
+    status: str = "unknown"
+    imported_at: str | None = None
+    last_synced_at: str | None = None
+    last_error: str | None = None
+    has_avatar: bool = False
+    avatar_path: str | None = None
+    avatar_updated_at: str | None = None
     last_group_scan: SessionGroupScanSummary | None = None
     recent_audit: list[SessionAuditItem] = []
 

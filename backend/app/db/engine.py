@@ -1,9 +1,12 @@
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 
-from sqlmodel import Session, SQLModel, create_engine
+from alembic import command
+from alembic.config import Config
+from sqlmodel import Session, create_engine
 
-from ..config import settings
+from ..config import BASE_DIR, settings
 
 _engine = None
 
@@ -32,10 +35,20 @@ def reset_engine() -> None:
         _engine = None
 
 
-def init_db() -> None:
+def run_migrations() -> None:
+    """Apply Alembic migrations up to head."""
     if not settings.database_enabled:
         return
-    SQLModel.metadata.create_all(get_engine())
+    alembic_ini = Path(BASE_DIR) / "alembic.ini"
+    if not alembic_ini.exists():
+        return
+    cfg = Config(str(alembic_ini))
+    cfg.set_main_option("sqlalchemy.url", settings.database_url)
+    command.upgrade(cfg, "head")
+
+
+def init_db() -> None:
+    run_migrations()
 
 
 def get_session() -> Generator[Session, None, None]:

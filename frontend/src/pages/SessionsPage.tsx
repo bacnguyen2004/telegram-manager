@@ -122,6 +122,7 @@ export function SessionsPage() {
           modified_at: null,
           has_journal: false,
           message: detailRes.error ?? 'Không lấy được thông tin file',
+          db_metadata: null,
         })
       }
 
@@ -374,6 +375,35 @@ export function SessionsPage() {
                         </p>
                       )}
                     </>
+                  )}
+
+                  <h4 className="modal-section-title">Metadata DB</h4>
+                  {detailData?.db_metadata ? (
+                    <>
+                      <div className="detail-row">
+                        <span>Nguồn</span>
+                        <strong>{detailData.db_metadata.source}</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>Trạng thái DB</span>
+                        <StatusBadge status={detailData.db_metadata.status} />
+                      </div>
+                      <div className="detail-row">
+                        <span>Import lúc</span>
+                        <strong>{formatDate(detailData.db_metadata.imported_at)}</strong>
+                      </div>
+                      <div className="detail-row">
+                        <span>Sync lần cuối</span>
+                        <strong>{formatDate(detailData.db_metadata.last_synced_at)}</strong>
+                      </div>
+                      {detailData.db_metadata.last_error && (
+                        <p className="detail-message">{detailData.db_metadata.last_error}</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="muted">
+                      Chưa có metadata — bấm <strong>Kiểm tra tất cả</strong> để sync DB.
+                    </p>
                   )}
 
                   <h4 className="modal-section-title">Tài khoản Telegram</h4>

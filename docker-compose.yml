@@ -30,8 +30,6 @@ services:
       SESSION_LOCK_DIR: /app/runtime/locks
       DATABASE_URL: postgresql+psycopg2://telegram:telegram@db:5432/telegram_manager
       DATABASE_ENABLED: "true"
-      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-0}
-      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
     volumes:
       - telegram-sessions:/app/runtime/sessions
       - telegram-locks:/app/runtime/locks

@@ -78,6 +78,36 @@ export interface SessionMeData {
   message: string
 }
 
+export interface SessionAuditItem {
+  action: string
+  resource: string | null
+  status: string
+  created_at: string
+}
+
+export interface SessionGroupScanSummary {
+  total: number
+  group_count: number
+  channel_count: number
+  scanned_at: string
+}
+
+export interface SessionDbMetadata {
+  telegram_user_id: number | null
+  username: string | null
+  display_name: string | null
+  source: string
+  status: string
+  imported_at: string | null
+  last_synced_at: string | null
+  last_error: string | null
+  has_avatar: boolean
+  avatar_path: string | null
+  avatar_updated_at: string | null
+  last_group_scan: SessionGroupScanSummary | null
+  recent_audit: SessionAuditItem[]
+}
+
 export interface SessionDetailData {
   status: 'success' | 'not_found'
   phone: string
@@ -87,6 +117,7 @@ export interface SessionDetailData {
   modified_at: string | null
   has_journal: boolean
   message: string
+  db_metadata: SessionDbMetadata | null
 }
 
 export interface DeleteSessionData {

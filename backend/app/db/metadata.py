@@ -29,6 +29,70 @@ class MetadataStore:
         except Exception:
             logger.exception("MetadataStore.%s failed", action)
 
+    def sync_session(
+        self,
+        phone: str,
+        *,
+        telegram_user_id: int | None,
+        username: str | None,
+        display_name: str | None,
+        status: str,
+        source: str = "imported",
+        last_error: str | None = None,
+        has_avatar: bool = False,
+        avatar_path: str | None = None,
+        audit_action: str | None = None,
+    ) -> None:
+        phone = phone.strip()
+        if not phone:
+            return
+        now = utc_now()
+
+        def _write(db: Session) -> None:
+            row = db.get(SessionMeta, phone)
+            is_new = row is None
+            if is_new:
+                row = SessionMeta(
+                    phone=phone,
+                    source=source,
+                    imported_at=now,
+                )
+            else:
+                row.source = source
+
+            row.telegram_user_id = telegram_user_id
+            row.username = username
+            row.display_name = display_name
+            row.status = status
+            row.last_synced_at = now
+            row.last_error = last_error
+            row.has_avatar = has_avatar
+            row.avatar_path = avatar_path
+            if has_avatar and avatar_path:
+                row.avatar_updated_at = now
+
+            db.add(row)
+
+            if audit_action is None:
+                audit_action_name = "sessions.import" if is_new else "sessions.sync"
+            else:
+                audit_action_name = audit_action
+
+            self._append_audit(
+                db,
+                phone=phone,
+                action=audit_action_name,
+                resource=phone,
+                status="success" if status == "active" else status,
+                detail={
+                    "telegram_user_id": telegram_user_id,
+                    "username": username,
+                    "source": source,
+                },
+            )
+
+        self._run("sync_session", _write)
+
     def record_login(
         self,
         phone: str,
@@ -38,44 +102,20 @@ class MetadataStore:
         first_name: str | None,
         last_name: str | None,
     ) -> None:
-        phone = phone.strip()
-        if not phone:
-            return
-
         display_name = " ".join(
             part for part in [first_name or "", last_name or ""] if part
         ).strip() or None
-        now = utc_now()
 
-        def _write(db: Session) -> None:
-            row = db.get(SessionMeta, phone)
-            if row is None:
-                row = SessionMeta(
-                    phone=phone,
-                    telegram_user_id=telegram_user_id,
-                    username=username,
-                    display_name=display_name,
-                    first_login_at=now,
-                    last_login_at=now,
-                    login_count=1,
-                )
-            else:
-                row.telegram_user_id = telegram_user_id
-                row.username = username
-                row.display_name = display_name
-                row.last_login_at = now
-                row.login_count += 1
-            db.add(row)
-            self._append_audit(
-                db,
-                phone=phone,
-                action="auth.login",
-                resource=phone,
-                status="success",
-                detail={"telegram_user_id": telegram_user_id, "username": username},
-            )
-
-        self._run("record_login", _write)
+        self.sync_session(
+            phone,
+            telegram_user_id=telegram_user_id,
+            username=username,
+            display_name=display_name,
+            status="active",
+            source="otp_login",
+            last_error=None,
+            audit_action="auth.login",
+        )
 
     def record_group_scan(self, phone: str, groups: list[dict[str, Any]]) -> None:
         phone = phone.strip()
@@ -180,9 +220,14 @@ class MetadataStore:
                     "telegram_user_id": meta.telegram_user_id,
                     "username": meta.username,
                     "display_name": meta.display_name,
-                    "first_login_at": _iso(meta.first_login_at),
-                    "last_login_at": _iso(meta.last_login_at),
-                    "login_count": meta.login_count,
+                    "source": meta.source,
+                    "status": meta.status,
+                    "imported_at": _iso(meta.imported_at),
+                    "last_synced_at": _iso(meta.last_synced_at),
+                    "last_error": meta.last_error,
+                    "has_avatar": meta.has_avatar,
+                    "avatar_path": meta.avatar_path,
+                    "avatar_updated_at": _iso(meta.avatar_updated_at),
                     "last_group_scan": (
                         {
                             "total": last_scan.total,
