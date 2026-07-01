@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
+import { StatusBadge } from '../components/StatusBadge'
 import type { CheckSessionItem } from '../types/api'
 import { DEFAULT_QUICK_REACTIONS } from '../utils/reactions'
 import {
@@ -16,6 +17,13 @@ import {
 } from '../utils/taskRunner'
 
 const TASK_ACTIONS: TaskAction[] = ['join', 'react', 'reply', 'send']
+
+const ACTION_HINTS: Record<TaskAction, string> = {
+  join: 'Join group/channel từ link invite hoặc @username',
+  react: 'Thả reaction lên bài post (link dạng t.me/channel/123)',
+  reply: 'Reply bài post với nội dung bạn nhập',
+  send: 'Gửi tin nhắn vào group hoặc chat',
+}
 
 function statusLabel(status: TaskRowStatus): string {
   const map: Record<TaskRowStatus, string> = {
@@ -56,6 +64,11 @@ export function TasksPage() {
     }))
   }, [sessions, checkResults])
 
+  const activeCount = useMemo(
+    () => checkResults.filter((item) => item.status === 'active').length,
+    [checkResults],
+  )
+
   const allowedActions = useMemo(() => {
     if (parsedLink.kind === 'invalid') return TASK_ACTIONS
     return TASK_ACTIONS.filter((item) => isActionAllowed(parsedLink, item))
@@ -69,8 +82,10 @@ export function TasksPage() {
   const progressStats = useMemo(() => {
     const done = progress.filter((row) => row.status === 'success').length
     const failed = progress.filter((row) => row.status === 'error').length
+    const runningCount = progress.filter((row) => row.status === 'running').length
     const total = progress.length
-    return { done, failed, total }
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0
+    return { done, failed, runningCount, total, pct }
   }, [progress])
 
   const loadSessions = useCallback(async () => {
@@ -212,6 +227,9 @@ export function TasksPage() {
     abortRef.current?.abort()
   }
 
+  const currentStep =
+    selectedList.length === 0 ? 1 : targetLink.trim() ? 3 : 2
+
   return (
     <div className="page page--tasks">
       <header className="page-header tasks-page-header">
@@ -219,8 +237,8 @@ export function TasksPage() {
           <span className="tasks-page-kicker">Bulk automation</span>
           <h1>Tác vụ hàng loạt</h1>
           <p className="page-desc">
-            Chọn nhiều acc, dán link Telegram, chạy lần lượt (join · react · reply ·
-            gửi tin). Chỉ gọi API hiện có — không cần backend mới.
+            Chọn nhiều acc, dán link Telegram, chạy lần lượt — join, react, reply
+            hoặc gửi tin.
           </p>
         </div>
         <div className="tasks-header-actions">
@@ -234,7 +252,7 @@ export function TasksPage() {
           </button>
           <button
             type="button"
-            className="btn btn--ghost"
+            className="btn btn--primary btn--sm"
             onClick={() => void handleCheckSessions()}
             disabled={checking || running || sessions.length === 0}
           >
@@ -243,31 +261,71 @@ export function TasksPage() {
         </div>
       </header>
 
+      <section className="stats-grid tasks-stats">
+        <article className="stat-card">
+          <p className="stat-label">Sessions</p>
+          <p className="stat-value">{loadingSessions ? '—' : sessions.length}</p>
+        </article>
+        <article className="stat-card stat-card--active">
+          <p className="stat-label">Đã chọn</p>
+          <p className="stat-value">{selectedList.length}</p>
+        </article>
+        <article className="stat-card">
+          <p className="stat-label">Acc live</p>
+          <p className="stat-value">
+            {checkResults.length > 0 ? activeCount : '—'}
+          </p>
+        </article>
+        <article className="stat-card">
+          <p className="stat-label">Tiến trình</p>
+          <p className="stat-value">
+            {progress.length > 0 ? `${progressStats.done}/${progressStats.total}` : '—'}
+          </p>
+        </article>
+      </section>
+
+      <nav className="tasks-steps" aria-label="Các bước thực hiện">
+        <div className={`tasks-step${currentStep >= 1 ? ' tasks-step--active' : ''}`}>
+          <span className="tasks-step-num">1</span>
+          <span className="tasks-step-label">Chọn tài khoản</span>
+        </div>
+        <div className={`tasks-step${currentStep >= 2 ? ' tasks-step--active' : ''}`}>
+          <span className="tasks-step-num">2</span>
+          <span className="tasks-step-label">Link & hành động</span>
+        </div>
+        <div className={`tasks-step${currentStep >= 3 ? ' tasks-step--active' : ''}`}>
+          <span className="tasks-step-num">3</span>
+          <span className="tasks-step-label">Chạy & theo dõi</span>
+        </div>
+      </nav>
+
       <Alert type="error" message={error} />
       <Alert type="success" message={success} />
 
       <div className="tasks-layout">
         <section className="panel tasks-accounts-panel">
-          <div className="panel-head">
-            <h2>Tài khoản</h2>
-            <p className="panel-meta">
-              {selectedList.length}/{sessions.length} đã chọn
-            </p>
+          <div className="tasks-accounts-head">
+            <div>
+              <h2>Tài khoản</h2>
+              <p className="panel-meta">
+                {selectedList.length}/{sessions.length} đã chọn
+              </p>
+            </div>
           </div>
 
           <div className="tasks-account-toolbar">
-            <button type="button" className="btn btn--sm btn--ghost" onClick={selectAll}>
-              Chọn tất cả
+            <button type="button" className="tasks-filter-pill" onClick={selectAll}>
+              Tất cả
             </button>
             <button
               type="button"
-              className="btn btn--sm btn--ghost"
+              className="tasks-filter-pill"
               onClick={selectActiveOnly}
               disabled={checkResults.length === 0}
             >
-              Chỉ acc live
+              Live
             </button>
-            <button type="button" className="btn btn--sm btn--ghost" onClick={clearSelection}>
+            <button type="button" className="tasks-filter-pill" onClick={clearSelection}>
               Bỏ chọn
             </button>
           </div>
@@ -277,191 +335,226 @@ export function TasksPage() {
               <li className="tasks-account-empty">Đang tải sessions…</li>
             ) : sessions.length === 0 ? (
               <li className="tasks-account-empty">
-                Chưa có session — đăng nhập ở trang Tài khoản.
+                <p>Chưa có session</p>
+                <p className="tasks-account-empty-hint">
+                  Đăng nhập ở trang Tài khoản trước.
+                </p>
               </li>
             ) : (
-              sessionRows.map(({ phone, check }) => (
-                <li key={phone}>
-                  <label className="tasks-account-item">
-                    <input
-                      type="checkbox"
-                      checked={selectedPhones.has(phone)}
-                      onChange={() => togglePhone(phone)}
-                      disabled={running}
-                    />
-                    <span className="tasks-account-phone">{phone}</span>
-                    {check ? (
-                      <span
-                        className={`tasks-account-status tasks-account-status--${check.status}`}
-                      >
-                        {check.status}
-                        {check.username ? ` · @${check.username}` : ''}
+              sessionRows.map(({ phone, check }) => {
+                const selected = selectedPhones.has(phone)
+                return (
+                  <li key={phone}>
+                    <label
+                      className={`tasks-account-item${selected ? ' tasks-account-item--selected' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="tasks-account-check"
+                        checked={selected}
+                        onChange={() => togglePhone(phone)}
+                        disabled={running}
+                      />
+                      <span className="tasks-account-main">
+                        <span className="tasks-account-phone">{phone}</span>
+                        {check?.username ? (
+                          <span className="tasks-account-username">@{check.username}</span>
+                        ) : null}
                       </span>
-                    ) : (
-                      <span className="tasks-account-status">chưa check</span>
-                    )}
-                  </label>
-                </li>
-              ))
+                      {check ? (
+                        <StatusBadge status={check.status} />
+                      ) : (
+                        <span className="tasks-account-muted">chưa check</span>
+                      )}
+                    </label>
+                  </li>
+                )
+              })
             )}
           </ul>
         </section>
 
-        <section className="panel tasks-config-panel">
-          <div className="panel-head">
-            <h2>Cấu hình tác vụ</h2>
-          </div>
-
-          <label className="field">
-            <span>Link mục tiêu</span>
-            <input
-              type="url"
-              placeholder="https://t.me/channel/123 hoặc https://t.me/+invite"
-              value={targetLink}
-              onChange={(e) => setTargetLink(e.target.value)}
-              disabled={running}
-            />
-          </label>
-
-          <div
-            className={`tasks-link-preview${
-              parsedLink.kind === 'invalid' ? ' tasks-link-preview--invalid' : ''
-            }`}
-          >
-            <p className="tasks-link-preview-label">Phân tích link</p>
-            <p>{parsedLink.label}</p>
-            {parsedLink.kind !== 'invalid' ? (
-              <p className="tasks-link-preview-meta">
-                Hỗ trợ:{' '}
-                {parsedLink.supportedActions.map((item) => actionLabel(item)).join(' · ')}
-              </p>
-            ) : null}
-          </div>
-
-          <label className="field">
-            <span>Loại tác vụ</span>
-            <select
-              value={action}
-              onChange={(e) => setAction(e.target.value as TaskAction)}
-              disabled={running}
-            >
-              {TASK_ACTIONS.map((item) => (
-                <option
+        <section className="panel tasks-workflow-panel">
+          <div className="tasks-action-tabs" role="tablist" aria-label="Loại tác vụ">
+            {TASK_ACTIONS.map((item) => {
+              const disabled =
+                parsedLink.kind !== 'invalid' && !isActionAllowed(parsedLink, item)
+              return (
+                <button
                   key={item}
-                  value={item}
-                  disabled={
-                    parsedLink.kind !== 'invalid' && !isActionAllowed(parsedLink, item)
-                  }
+                  type="button"
+                  role="tab"
+                  aria-selected={action === item}
+                  className={`tasks-action-tab${action === item ? ' tasks-action-tab--active' : ''}`}
+                  disabled={running || disabled}
+                  onClick={() => setAction(item)}
                 >
                   {actionLabel(item)}
-                </option>
-              ))}
-            </select>
-          </label>
+                </button>
+              )
+            })}
+          </div>
 
-          {action === 'react' ? (
-            <div className="field">
-              <span>Reaction</span>
-              <div className="tasks-emoji-picker">
-                {DEFAULT_QUICK_REACTIONS.map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    className={`message-reaction-pick${emoji === item ? ' message-reaction-pick--active' : ''}`}
-                    onClick={() => setEmoji(item)}
-                    disabled={running}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
+          <div className="tasks-workflow-body">
+            <p className="tasks-action-hint">{ACTION_HINTS[action]}</p>
 
-          {action === 'reply' || action === 'send' ? (
-            <label className="field">
-              <span>Nội dung</span>
-              <textarea
-                rows={4}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={
-                  action === 'reply'
-                    ? 'Nội dung reply bài post…'
-                    : 'Tin nhắn gửi vào group/chat…'
-                }
+            <label className="field tasks-field">
+              <span>Link mục tiêu</span>
+              <input
+                type="url"
+                placeholder="https://t.me/channel/123 hoặc https://t.me/+invite"
+                value={targetLink}
+                onChange={(e) => setTargetLink(e.target.value)}
                 disabled={running}
               />
             </label>
-          ) : null}
 
-          <label className="field">
-            <span>Delay giữa các acc (giây)</span>
-            <input
-              type="number"
-              min={0}
-              max={120}
-              value={delaySeconds}
-              onChange={(e) => setDelaySeconds(Number(e.target.value) || 0)}
-              disabled={running}
-            />
-          </label>
-
-          <div className="tasks-run-actions">
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => void handleRun()}
-              disabled={running || selectedList.length === 0}
+            <div
+              className={`tasks-link-preview${
+                parsedLink.kind === 'invalid' && targetLink.trim()
+                  ? ' tasks-link-preview--invalid'
+                  : parsedLink.kind !== 'invalid' && targetLink.trim()
+                    ? ' tasks-link-preview--valid'
+                    : ''
+              }`}
             >
-              {running ? 'Đang chạy…' : `Chạy (${selectedList.length} acc)`}
-            </button>
-            {running ? (
-              <button type="button" className="btn btn--danger" onClick={handleStop}>
-                Dừng
-              </button>
+              <p className="tasks-link-preview-label">Phân tích link</p>
+              <p className="tasks-link-preview-text">
+                {targetLink.trim() ? parsedLink.label : 'Dán link Telegram để xem preview'}
+              </p>
+              {parsedLink.kind !== 'invalid' && targetLink.trim() ? (
+                <p className="tasks-link-preview-meta">
+                  {parsedLink.supportedActions.map((item) => actionLabel(item)).join(' · ')}
+                </p>
+              ) : null}
+            </div>
+
+            {action === 'react' ? (
+              <div className="field tasks-field">
+                <span>Reaction</span>
+                <div className="tasks-emoji-picker">
+                  {DEFAULT_QUICK_REACTIONS.map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      className={`tasks-emoji-btn${emoji === item ? ' tasks-emoji-btn--active' : ''}`}
+                      onClick={() => setEmoji(item)}
+                      disabled={running}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              </div>
             ) : null}
+
+            {action === 'reply' || action === 'send' ? (
+              <label className="field tasks-field">
+                <span>Nội dung</span>
+                <textarea
+                  rows={4}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder={
+                    action === 'reply'
+                      ? 'Nội dung reply bài post…'
+                      : 'Tin nhắn gửi vào group/chat…'
+                  }
+                  disabled={running}
+                />
+              </label>
+            ) : null}
+
+            <label className="field tasks-field tasks-field--inline">
+              <span>Delay giữa các acc</span>
+              <div className="tasks-delay-input">
+                <input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={delaySeconds}
+                  onChange={(e) => setDelaySeconds(Number(e.target.value) || 0)}
+                  disabled={running}
+                />
+                <span className="tasks-delay-unit">giây</span>
+              </div>
+            </label>
+
+            <div className="tasks-run-actions">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => void handleRun()}
+                disabled={running || selectedList.length === 0}
+              >
+                {running ? 'Đang chạy…' : `Chạy ${selectedList.length} acc`}
+              </button>
+              {running ? (
+                <button type="button" className="btn btn--danger" onClick={handleStop}>
+                  Dừng
+                </button>
+              ) : null}
+            </div>
           </div>
         </section>
       </div>
 
-      {progress.length > 0 ? (
-        <section className="panel tasks-progress-panel">
-          <div className="panel-head">
+      <section className="panel tasks-progress-panel">
+        <div className="tasks-progress-head">
+          <div>
             <h2>Tiến trình</h2>
             <p className="panel-meta">
-              {progressStats.done}/{progressStats.total} xong
-              {progressStats.failed > 0 ? ` · ${progressStats.failed} lỗi` : ''}
+              {progress.length > 0
+                ? `${progressStats.done} xong · ${progressStats.failed} lỗi`
+                : 'Chưa chạy task'}
             </p>
           </div>
-          <div className="table-wrap">
-            <table className="data-table tasks-progress-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Phone</th>
-                  <th>Trạng thái</th>
-                  <th>Kết quả</th>
-                </tr>
-              </thead>
-              <tbody>
-                {progress.map((row, index) => (
-                  <tr key={row.phone} className={`tasks-row--${row.status}`}>
-                    <td>{index + 1}</td>
-                    <td className="mono">{row.phone}</td>
-                    <td>
-                      <span className={`tasks-status-pill tasks-status-pill--${row.status}`}>
-                        {statusLabel(row.status)}
-                      </span>
-                    </td>
-                    <td>{row.message}</td>
+          {progress.length > 0 ? (
+            <span className="tasks-progress-pct">{progressStats.pct}%</span>
+          ) : null}
+        </div>
+
+        {progress.length > 0 ? (
+          <>
+            <div className="tasks-progress-bar" role="progressbar" aria-valuenow={progressStats.pct}>
+              <div
+                className="tasks-progress-bar-fill"
+                style={{ width: `${progressStats.pct}%` }}
+              />
+            </div>
+            <div className="table-wrap tasks-table-wrap">
+              <table className="data-table tasks-progress-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Phone</th>
+                    <th>Trạng thái</th>
+                    <th>Kết quả</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {progress.map((row, index) => (
+                    <tr key={row.phone} className={`tasks-row--${row.status}`}>
+                      <td>{index + 1}</td>
+                      <td className="mono">{row.phone}</td>
+                      <td>
+                        <span className={`tasks-status-pill tasks-status-pill--${row.status}`}>
+                          {statusLabel(row.status)}
+                        </span>
+                      </td>
+                      <td className="tasks-result-cell">{row.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : (
+          <div className="tasks-progress-empty">
+            <p>Chọn acc, nhập link và bấm <strong>Chạy</strong> để xem log từng tài khoản.</p>
           </div>
-        </section>
-      ) : null}
+        )}
+      </section>
     </div>
   )
 }
