@@ -8,6 +8,7 @@ import { GroupsPage } from './pages/GroupsPage'
 import { HealthPage } from './pages/HealthPage'
 import { SecurityPage } from './pages/SecurityPage'
 import { SessionsPage } from './pages/SessionsPage'
+import { TasksPage } from './pages/TasksPage'
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
             <Route path="sessions" element={<SessionsPage />} />
             <Route path="groups" element={<GroupsPage />} />
             <Route path="dialogs" element={<DialogsPage />} />
+            <Route path="tasks" element={<TasksPage />} />
             <Route path="health" element={<HealthPage />} />
             <Route path="auth" element={<AuthPage />} />
             <Route path="security" element={<SecurityPage />} />

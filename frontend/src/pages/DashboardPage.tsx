@@ -84,6 +84,23 @@ const quickLinks = [
     ),
   },
   {
+    to: '/tasks',
+    label: 'Tasks',
+    desc: 'Nhiều acc · join · react · reply',
+    accent: 'emerald',
+    icon: (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
+        <path
+          d="M4 7h9M4 12h16M4 17h12"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+        <circle cx="19" cy="7" r="2" stroke="currentColor" strokeWidth="1.8" />
+      </svg>
+    ),
+  },
+  {
     to: '/groups',
     label: 'Groups',
     desc: 'Join, leave, danh sách nhóm',

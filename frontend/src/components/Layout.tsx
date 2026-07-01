@@ -10,6 +10,7 @@ const navSections = [
       { to: '/sessions', label: 'Sessions', end: false },
       { to: '/groups', label: 'Groups', end: false },
       { to: '/dialogs', label: 'Dialogs', end: false },
+      { to: '/tasks', label: 'Tasks', end: false },
     ],
   },
   {
@@ -31,6 +32,7 @@ function pageTitle(pathname: string): string {
     '/sessions': 'Sessions',
     '/groups': 'Groups',
     '/dialogs': 'Dialogs',
+    '/tasks': 'Tasks',
     '/health': 'Health',
     '/auth': 'Tài khoản',
     '/security': 'Bảo mật',
