@@ -52,3 +52,24 @@ class AuditLog(SQLModel, table=True):
     status: str = Field(max_length=32)
     detail: str | None = Field(default=None, max_length=2000)
     created_at: datetime = Field(default_factory=utc_now, index=True)
+
+
+class ConversationJob(SQLModel, table=True):
+    """Background conversation script execution."""
+
+    __tablename__ = "conversation_jobs"
+
+    id: int | None = Field(default=None, primary_key=True)
+    status: str = Field(default="pending", max_length=16, index=True)
+    group_link: str = Field(max_length=512)
+    peer_id: str = Field(max_length=512)
+    script_json: str = Field(default="{}")
+    total_lines: int = Field(default=0, ge=0)
+    completed_lines: int = Field(default=0, ge=0)
+    success_lines: int = Field(default=0, ge=0)
+    error_lines: int = Field(default=0, ge=0)
+    stop_requested: bool = Field(default=False)
+    line_results_json: str = Field(default="[]")
+    error_message: str | None = Field(default=None, max_length=2000)
+    created_at: datetime = Field(default_factory=utc_now, index=True)
+    updated_at: datetime = Field(default_factory=utc_now)

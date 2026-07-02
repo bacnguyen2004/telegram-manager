@@ -11,6 +11,7 @@ const navSections = [
       { to: '/groups', label: 'Groups', end: false },
       { to: '/dialogs', label: 'Dialogs', end: false },
       { to: '/tasks', label: 'Tasks', end: false },
+      { to: '/conversation', label: 'Hội thoại', end: false },
     ],
   },
   {
@@ -36,6 +37,7 @@ function pageTitle(pathname: string): string {
     '/groups': 'Groups',
     '/dialogs': 'Dialogs',
     '/tasks': 'Tasks',
+    '/conversation': 'Hội thoại',
     '/audit': 'Audit log',
     '/health': 'Health',
     '/auth': 'Tài khoản',

@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from . import auth, dialogs, groups, health, messages, metadata, sessions
+from . import auth, conversation, dialogs, groups, health, messages, metadata, sessions
 
 
 api_router = APIRouter()
@@ -11,3 +11,4 @@ api_router.include_router(groups.router)
 api_router.include_router(dialogs.router)
 api_router.include_router(messages.router)
 api_router.include_router(metadata.router)
+api_router.include_router(conversation.router)

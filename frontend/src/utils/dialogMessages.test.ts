@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DialogItem } from '../types/api'
+import type { DialogItem, DialogMessageItem } from '../types/api'
 import {
   getUnreadMessagesInLoaded,
   inferHasMoreOlder,
@@ -10,6 +10,21 @@ import {
   planPartialMarkRead,
   resolveReplyQuote,
 } from './dialogMessages'
+
+function stubMsg(id: number, text: string): DialogMessageItem {
+  return {
+    id,
+    date: '2026-01-01T00:00:00Z',
+    sender_id: '1',
+    sender_name: 'A',
+    outgoing: false,
+    content_type: 'text',
+    has_media: false,
+    has_photo: false,
+    text,
+    reactions: [],
+  }
+}
 
 const baseDialog: DialogItem = {
   id: '100',
@@ -129,32 +144,17 @@ describe('planPartialMarkRead', () => {
 
 describe('mergeNewMessages', () => {
   it('appends only new ids and keeps sort order', () => {
-    const prev = [
-      { id: 1, text: 'a' },
-      { id: 2, text: 'b' },
-    ] as const
-    const incoming = [
-      { id: 2, text: 'dup' },
-      { id: 3, text: 'c' },
-    ] as const
-    const merged = mergeNewMessages([...prev], [...incoming])
+    const prev = [stubMsg(1, 'a'), stubMsg(2, 'b')]
+    const incoming = [stubMsg(2, 'dup'), stubMsg(3, 'c')]
+    const merged = mergeNewMessages(prev, incoming)
     expect(merged.map((msg) => msg.id)).toEqual([1, 2, 3])
     expect(merged[1].text).toBe('b')
   })
 })
 
 describe('resolveReplyQuote', () => {
-  const messages = [
-    {
-      id: 10,
-      text: 'parent text',
-      outgoing: false,
-      sender_name: 'Alice',
-      has_photo: false,
-      has_media: false,
-      content_type: 'text',
-    },
-  ] as const
+  const messages = [stubMsg(10, 'parent text')]
+  messages[0].sender_name = 'Alice'
 
   it('returns null when no reply id', () => {
     expect(resolveReplyQuote({ reply_to_msg_id: null }, [])).toBeNull()
@@ -173,7 +173,7 @@ describe('resolveReplyQuote', () => {
   })
 
   it('falls back to loaded parent message', () => {
-    const quote = resolveReplyQuote({ reply_to_msg_id: 10 }, [...messages])
+    const quote = resolveReplyQuote({ reply_to_msg_id: 10 }, messages)
     expect(quote).toEqual({ id: 10, text: 'parent text', senderName: 'Alice' })
   })
 })

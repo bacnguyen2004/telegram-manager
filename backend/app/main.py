@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from .config import settings
 from .db import init_db
 from .routers import api_router
+from .services.conversation import conversation_job_store
 from .utils.exceptions import register_exception_handlers
 
 
@@ -20,6 +21,7 @@ SETUP_STEPS = [
 async def lifespan(app: FastAPI):
     settings.ensure_runtime_dirs()
     init_db()
+    conversation_job_store.recover_orphaned_jobs()
     yield
 
 

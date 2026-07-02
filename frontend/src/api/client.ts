@@ -556,4 +556,63 @@ export const api = {
     return request<SessionMetaOverviewData>('/metadata/sessions')
   },
 
+  parseConversation(payload: import('../utils/conversationScript').ConversationParseRequestPayload) {
+    return request<import('../utils/conversationScript').ConversationValidateData>(
+      '/conversation/parse',
+      {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      },
+    )
+  },
+
+  createConversationJob(
+    script: import('../utils/conversationScript').ConversationScript,
+    options?: { startLineId?: number },
+  ) {
+    return request<{ job_id: number; status: string; total_lines: number }>(
+      '/conversation/jobs',
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          script,
+          start_line_id: options?.startLineId ?? null,
+        }),
+      },
+    )
+  },
+
+  listConversationJobs(limit = 10, offset = 0) {
+    return request<import('../utils/conversationScript').ConversationJobListData>(
+      `/conversation/jobs?limit=${limit}&offset=${offset}`,
+    )
+  },
+
+  getConversationJob(jobId: number) {
+    return request<import('../utils/conversationScript').ConversationJobData>(
+      `/conversation/jobs/${jobId}`,
+    )
+  },
+
+  stopConversationJob(jobId: number) {
+    return request<import('../utils/conversationScript').ConversationJobData>(
+      `/conversation/jobs/${jobId}/stop`,
+      { method: 'POST' },
+    )
+  },
+
+  resumeConversationJob(jobId: number) {
+    return request<import('../utils/conversationScript').ConversationJobData>(
+      `/conversation/jobs/${jobId}/resume`,
+      { method: 'POST' },
+    )
+  },
+
+  retryConversationLine(jobId: number, lineId: number) {
+    return request<import('../utils/conversationScript').ConversationJobData>(
+      `/conversation/jobs/${jobId}/lines/${lineId}/retry`,
+      { method: 'POST' },
+    )
+  },
+
 }
