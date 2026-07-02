@@ -1,0 +1,132 @@
+.confirm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: var(--modal-backdrop);
+  animation: confirm-fade-in 0.15s ease-out;
+}
+
+@keyframes confirm-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.confirm-modal {
+  width: 100%;
+  max-width: 400px;
+  padding: 22px 22px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+  animation: confirm-slide-in 0.18s ease-out;
+}
+
+@keyframes confirm-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.confirm-modal-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 14px;
+  border-radius: 14px;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.confirm-modal-icon--danger {
+  background: color-mix(in srgb, var(--danger) 12%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--border));
+}
+
+.confirm-modal-icon--warn {
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--border));
+}
+
+.confirm-modal-title {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--text-strong);
+  line-height: 1.35;
+}
+
+.confirm-modal-desc {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.confirm-modal-details {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  list-style: none;
+}
+
+.confirm-modal-details li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+.confirm-modal-details li + li {
+  margin-top: 6px;
+}
+
+.confirm-modal-details li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.confirm-modal-details strong,
+.confirm-modal-desc strong {
+  color: var(--text-strong);
+  font-weight: 700;
+}
+
+.confirm-modal-phone {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  word-break: break-all;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: stretch;
+}
+
+.confirm-modal-actions .btn {
+  flex: 1;
+  justify-content: center;
+}

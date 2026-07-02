@@ -243,7 +243,14 @@
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-.sessions-toolbar-block {
+.sessions-toolbar-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 12px;
+}
+
+.sessions-toolbar-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -258,109 +265,38 @@
   color: var(--text-muted);
 }
 
-.sessions-filter-pills,
-.sessions-sort-pills {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.sessions-filter-pill,
-.sessions-sort-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border-radius: 999px;
+.sessions-toolbar-select {
+  min-width: 168px;
+  max-width: 100%;
+  padding: 10px 36px 10px 12px;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-muted);
+  background-color: var(--bg-elevated);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2364748b' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  color: var(--text-strong);
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  appearance: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.sessions-filter-pill span {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  background: var(--bg-hover);
+.sessions-toolbar-select:hover {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
 }
 
-.sessions-filter-pill:hover,
-.sessions-sort-pill:hover {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-  color: var(--text-strong);
-}
-
-.sessions-filter-pill--selected {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
-  color: var(--accent);
-}
-
-.sessions-filter-pill--selected span {
-  background: color-mix(in srgb, var(--accent) 15%, var(--bg));
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--active {
-  border-color: color-mix(in srgb, var(--success) 35%, var(--border));
-  background: color-mix(in srgb, var(--success) 10%, var(--bg));
-  color: var(--success);
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--active span {
-  background: color-mix(in srgb, var(--success) 15%, var(--bg));
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--unauthorized {
-  border-color: color-mix(in srgb, var(--warn) 35%, var(--border));
-  background: color-mix(in srgb, var(--warn) 10%, var(--bg));
-  color: var(--warn);
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--unauthorized span {
-  background: color-mix(in srgb, var(--warn) 15%, var(--bg));
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--error {
-  border-color: color-mix(in srgb, var(--danger) 35%, var(--border));
-  background: color-mix(in srgb, var(--danger) 10%, var(--bg));
-  color: var(--danger);
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--error span {
-  background: color-mix(in srgb, var(--danger) 15%, var(--bg));
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--unchecked {
-  border-color: color-mix(in srgb, var(--text-muted) 35%, var(--border));
-  background: color-mix(in srgb, var(--text-muted) 8%, var(--bg));
-  color: var(--text-strong);
-}
-
-.sessions-filter-pill--selected.sessions-filter-pill--unchecked span {
-  background: color-mix(in srgb, var(--text-muted) 12%, var(--bg));
-}
-
-.sessions-sort-pill--active {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-  background: color-mix(in srgb, var(--accent) 10%, var(--bg));
-  color: var(--accent);
+.sessions-toolbar-select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .sessions-clear-filters {
-  align-self: center;
+  align-self: flex-end;
   margin-left: auto;
 }
 
@@ -404,15 +340,44 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, var(--bg)), color-mix(in srgb, var(--accent) 8%, var(--bg-elevated)));
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
-  color: var(--accent);
-  font-size: 11px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(
+    135deg,
+    hsl(var(--avatar-hue, 200) 58% 52%),
+    hsl(calc(var(--avatar-hue, 200) + 28) 52% 40%)
+  );
+  border: 2px solid var(--bg-elevated);
+  box-shadow: var(--avatar-shadow);
+  color: #fff;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.02em;
+  overflow: hidden;
+}
+
+.sessions-avatar--sm {
+  width: 30px;
+  height: 30px;
+  font-size: 10px;
+}
+
+.sessions-avatar--lg {
+  width: 72px;
+  height: 72px;
+  font-size: 22px;
+}
+
+.sessions-avatar--photo {
+  background: var(--bg-muted);
+}
+
+.sessions-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .sessions-phone-cell .phone {
@@ -535,20 +500,6 @@
   text-decoration: underline;
 }
 
-.sessions-modal-foot {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.sessions-modal-links {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
 /* Responsive */
 @media (max-width: 900px) {
   .sessions-list-toolbar {
@@ -556,9 +507,22 @@
     align-items: stretch;
   }
 
+  .sessions-toolbar-filters {
+    width: 100%;
+  }
+
+  .sessions-toolbar-field {
+    flex: 1;
+    min-width: min(100%, 160px);
+  }
+
+  .sessions-toolbar-select {
+    width: 100%;
+  }
+
   .sessions-clear-filters {
     margin-left: 0;
-    align-self: flex-start;
+    align-self: flex-end;
   }
 
   .sessions-actions {

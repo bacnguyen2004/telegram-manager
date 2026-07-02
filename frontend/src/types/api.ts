@@ -75,6 +75,57 @@ export interface SessionMeData {
   first_name: string | null
   last_name: string | null
   username: string | null
+  about: string
+  has_avatar: boolean
+  message: string
+}
+
+export interface UpdateSessionProfileData {
+  status: 'success' | 'unauthorized' | 'error'
+  phone: string
+  me_id: number | null
+  first_name: string | null
+  last_name: string | null
+  username: string | null
+  about: string
+  has_avatar: boolean
+  message: string
+}
+
+export interface UpdateSessionAvatarData {
+  status: 'success' | 'unauthorized' | 'error'
+  phone: string
+  has_avatar: boolean
+  message: string
+}
+
+export interface SessionAuthorizationItem {
+  hash: string
+  current: boolean
+  device_model: string
+  platform: string
+  system_version: string
+  api_id: number | null
+  app_name: string
+  date_created: string | null
+  date_active: string | null
+  ip: string
+  country: string
+  region: string
+}
+
+export interface SessionAuthorizationsData {
+  status: 'success' | 'unauthorized' | 'error'
+  phone: string
+  total: number
+  items: SessionAuthorizationItem[]
+  message: string
+}
+
+export interface RevokeAuthorizationData {
+  status: 'success' | 'error'
+  phone: string
+  hash: string
   message: string
 }
 
@@ -441,6 +492,8 @@ export interface SessionMetaOverviewItem {
   display_name: string | null
   status: string
   source: string
+  has_avatar: boolean
+  avatar_updated_at: string | null
   imported_at: string | null
   last_synced_at: string | null
   last_group_scan: SessionGroupScanSummary | null

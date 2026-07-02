@@ -40,7 +40,7 @@ class MetadataStore:
         status: str,
         source: str = "imported",
         last_error: str | None = None,
-        has_avatar: bool = False,
+        has_avatar: bool | None = None,
         avatar_path: str | None = None,
         audit_action: str | None = None,
     ) -> None:
@@ -67,10 +67,13 @@ class MetadataStore:
             row.status = status
             row.last_synced_at = now
             row.last_error = last_error
-            row.has_avatar = has_avatar
-            row.avatar_path = avatar_path
-            if has_avatar and avatar_path:
-                row.avatar_updated_at = now
+            if has_avatar is not None:
+                row.has_avatar = has_avatar
+                row.avatar_path = avatar_path
+                if has_avatar and avatar_path:
+                    row.avatar_updated_at = now
+                else:
+                    row.avatar_updated_at = None
 
             db.add(row)
 
@@ -335,6 +338,8 @@ class MetadataStore:
                             "display_name": meta.display_name,
                             "status": meta.status,
                             "source": meta.source,
+                            "has_avatar": meta.has_avatar,
+                            "avatar_updated_at": _iso(meta.avatar_updated_at),
                             "imported_at": _iso(meta.imported_at),
                             "last_synced_at": _iso(meta.last_synced_at),
                             "last_group_scan": (

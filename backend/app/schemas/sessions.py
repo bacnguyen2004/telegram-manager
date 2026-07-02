@@ -40,6 +40,38 @@ class SessionMeData(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     username: str | None = None
+    about: str = ""
+    has_avatar: bool = False
+    message: str = ""
+
+
+class UpdateSessionProfileRequest(BaseModel):
+    first_name: str = Field(..., min_length=1, max_length=64)
+    last_name: str = Field(default="", max_length=64)
+    username: str = Field(
+        default="",
+        max_length=32,
+        description="Username khong co @. De trong de xoa username.",
+    )
+    about: str = Field(default="", max_length=70)
+
+
+class UpdateSessionProfileData(BaseModel):
+    status: Literal["success", "unauthorized", "error"]
+    phone: str
+    me_id: int | None = None
+    first_name: str | None = None
+    last_name: str | None = None
+    username: str | None = None
+    about: str = ""
+    has_avatar: bool = False
+    message: str = ""
+
+
+class UpdateSessionAvatarData(BaseModel):
+    status: Literal["success", "unauthorized", "error"]
+    phone: str
+    has_avatar: bool = False
     message: str = ""
 
 
@@ -90,4 +122,34 @@ class DeleteSessionData(BaseModel):
     phone: str
     deleted_files: list[str] = []
     pending_auth_cleared: bool = False
+    message: str = ""
+
+
+class SessionAuthorizationItem(BaseModel):
+    hash: str
+    current: bool = False
+    device_model: str = ""
+    platform: str = ""
+    system_version: str = ""
+    api_id: int | None = None
+    app_name: str = ""
+    date_created: str | None = None
+    date_active: str | None = None
+    ip: str = ""
+    country: str = ""
+    region: str = ""
+
+
+class SessionAuthorizationsData(BaseModel):
+    status: Literal["success", "unauthorized", "error"]
+    phone: str
+    total: int = 0
+    items: list[SessionAuthorizationItem] = []
+    message: str = ""
+
+
+class RevokeAuthorizationData(BaseModel):
+    status: Literal["success", "error"]
+    phone: str
+    hash: str
     message: str = ""

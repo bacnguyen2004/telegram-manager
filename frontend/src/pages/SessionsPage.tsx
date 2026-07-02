@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './SessionsPage.css'
-import { Link } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
+import { ConfirmModal } from '../components/ConfirmModal'
 import { Pagination } from '../components/Pagination'
+import { SessionAvatar } from '../components/SessionAvatar'
+import { SessionDetailModal } from '../components/SessionDetailModal'
 import { StatusBadge } from '../components/StatusBadge'
 import { usePagination } from '../hooks/usePagination'
 import type {
@@ -12,8 +15,7 @@ import type {
   SessionMeData,
   SessionMetaOverviewItem,
 } from '../types/api'
-import { auditActionLabel } from '../utils/auditLabels'
-import { formatBytes, formatDate, formatRelativeDate } from '../utils/format'
+import { formatDate, formatRelativeDate } from '../utils/format'
 import {
   buildMetaByPhone,
   formatUsername,
@@ -34,11 +36,15 @@ const STATUS_FILTER_OPTIONS: { id: SessionStatusFilter; label: string }[] = [
   { id: 'unchecked', label: 'Chưa check' },
 ]
 
-const SORT_OPTIONS: { id: SessionSortKey; label: string }[] = [
-  { id: 'phone', label: 'Số ĐT' },
-  { id: 'name', label: 'Tên' },
-  { id: 'status', label: 'Trạng thái' },
-  { id: 'checked', label: 'Kiểm tra' },
+const SORT_DROPDOWN_OPTIONS: { value: `${SessionSortKey}:${SessionSortDir}`; label: string }[] = [
+  { value: 'checked:desc', label: 'Kiểm tra — mới nhất' },
+  { value: 'checked:asc', label: 'Kiểm tra — cũ nhất' },
+  { value: 'phone:asc', label: 'Số ĐT — A→Z' },
+  { value: 'phone:desc', label: 'Số ĐT — Z→A' },
+  { value: 'name:asc', label: 'Tên — A→Z' },
+  { value: 'name:desc', label: 'Tên — Z→A' },
+  { value: 'status:asc', label: 'Trạng thái — A→Z' },
+  { value: 'status:desc', label: 'Trạng thái — Z→A' },
 ]
 
 const STATUS_SORT_ORDER: Record<string, number> = {
@@ -125,23 +131,15 @@ function accountSortName(
   return label.secondary?.toLowerCase() ?? ''
 }
 
-function sessionInitials(
-  phone: string,
+function sessionAvatarLabel(
   meta: SessionMetaOverviewItem | undefined,
   display: SessionDisplayInfo,
 ): string {
   const name = meta?.display_name?.trim()
-  if (name) {
-    const parts = name.split(/\s+/).filter(Boolean)
-    if (parts.length >= 2) {
-      return `${parts[0].charAt(0)}${parts[1].charAt(0)}`.toUpperCase()
-    }
-    return name.slice(0, 2).toUpperCase()
-  }
+  if (name) return name
   const username = display.username?.replace(/^@/, '').trim()
-  if (username) return username.slice(0, 2).toUpperCase()
-  const digits = phone.replace(/\D/g, '')
-  return digits.slice(-2) || '?'
+  if (username) return username
+  return ''
 }
 
 function sortSessions(
@@ -225,6 +223,8 @@ function patchMetaAfterCheck(
     imported_at: existing?.imported_at ?? item.last_synced_at,
     last_synced_at: item.last_synced_at,
     last_group_scan: existing?.last_group_scan ?? null,
+    has_avatar: existing?.has_avatar ?? false,
+    avatar_updated_at: existing?.avatar_updated_at ?? null,
   }
   for (const key of phoneLookupKeys(item.phone)) {
     next.set(key, updated)
@@ -274,6 +274,7 @@ function calcStats(
 }
 
 export function SessionsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [sessions, setSessions] = useState<string[]>([])
   const [total, setTotal] = useState(0)
   const [checkResults, setCheckResults] = useState<CheckSessionItem[]>([])
@@ -281,6 +282,7 @@ export function SessionsPage() {
   const [checking, setChecking] = useState(false)
   const [checkingPhone, setCheckingPhone] = useState<string | null>(null)
   const [deletingPhone, setDeletingPhone] = useState<string | null>(null)
+  const [deleteConfirmPhone, setDeleteConfirmPhone] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [selectedPhone, setSelectedPhone] = useState<string | null>(null)
@@ -299,6 +301,7 @@ export function SessionsPage() {
   const [checkTotal, setCheckTotal] = useState(0)
   const checkAbortRef = useRef(false)
   const checkRequestRef = useRef<AbortController | null>(null)
+  const urlPhoneDismissedRef = useRef(false)
 
   const loadMetadata = useCallback(async () => {
     try {
@@ -335,6 +338,20 @@ export function SessionsPage() {
     void loadSessions()
     void loadMetadata()
   }, [loadSessions, loadMetadata])
+
+  useEffect(() => {
+    const phoneParam = searchParams.get('phone')?.trim()
+
+    if (!phoneParam) {
+      urlPhoneDismissedRef.current = false
+      return
+    }
+
+    if (urlPhoneDismissedRef.current || loading || selectedPhone === phoneParam) return
+    if (sessions.includes(phoneParam)) {
+      void handleViewDetail(phoneParam)
+    }
+  }, [searchParams, sessions, loading, selectedPhone])
 
   useEffect(() => {
     if (!success) return
@@ -456,6 +473,12 @@ export function SessionsPage() {
       ])
       setMetaByPhone((prev) => patchMetaAfterCheck(prev, item))
       void loadMetadata()
+      if (selectedPhone === phone) {
+        const meRes = await api.getSessionMe(phone)
+        if (meRes.success && meRes.data) {
+          setMeData(meRes.data)
+        }
+      }
     } catch {
       setError('Không kết nối được API khi kiểm tra session.')
     } finally {
@@ -464,7 +487,11 @@ export function SessionsPage() {
   }
 
   async function handleViewDetail(phone: string) {
+    urlPhoneDismissedRef.current = false
     setSelectedPhone(phone)
+    const next = new URLSearchParams(searchParams)
+    next.set('phone', phone)
+    setSearchParams(next, { replace: true })
     setDetailData(null)
     setMeData(null)
     setModalLoading(true)
@@ -500,6 +527,8 @@ export function SessionsPage() {
           first_name: null,
           last_name: null,
           username: null,
+          about: '',
+          has_avatar: false,
           message: meRes.error ?? 'Không lấy được thông tin tài khoản',
         })
       }
@@ -510,11 +539,31 @@ export function SessionsPage() {
     }
   }
 
-  async function handleDelete(phone: string) {
-    const confirmed = window.confirm(
-      `Xóa session ${phone}?\n\nFile .session và pending_auth sẽ bị xóa vĩnh viễn.`,
-    )
-    if (!confirmed) return
+  async function handleRefreshDetail(phone: string) {
+    try {
+      const [detailRes, meRes] = await Promise.all([
+        api.getSession(phone),
+        api.getSessionMe(phone),
+      ])
+      if (detailRes.success && detailRes.data) {
+        setDetailData(detailRes.data)
+      }
+      if (meRes.success && meRes.data) {
+        setMeData(meRes.data)
+      }
+      void loadMetadata()
+    } catch {
+      setError('Không tải lại được chi tiết session.')
+    }
+  }
+
+  function requestDelete(phone: string) {
+    setDeleteConfirmPhone(phone)
+  }
+
+  async function confirmDelete() {
+    const phone = deleteConfirmPhone
+    if (!phone) return
 
     setDeletingPhone(phone)
     setError('')
@@ -522,7 +571,7 @@ export function SessionsPage() {
     try {
       const res = await api.deleteSession(phone)
       if (!res.success || !res.data) {
-        setError(res.error ?? 'Xóa session thất bại')
+        setError(res.error ?? 'Xóa khỏi tool thất bại')
         return
       }
       if (res.data.status === 'error') {
@@ -541,13 +590,18 @@ export function SessionsPage() {
       setError('Không kết nối được API khi xóa session.')
     } finally {
       setDeletingPhone(null)
+      setDeleteConfirmPhone(null)
     }
   }
 
   function closeModal() {
+    urlPhoneDismissedRef.current = true
     setSelectedPhone(null)
     setDetailData(null)
     setMeData(null)
+    const next = new URLSearchParams(searchParams)
+    next.delete('phone')
+    setSearchParams(next, { replace: true })
   }
 
   const resultByPhone = useMemo(
@@ -618,29 +672,28 @@ export function SessionsPage() {
     metaByPhone,
   ])
 
-  const hasActiveFilters = Boolean(search.trim()) || statusFilter !== 'all'
+  const sortValue = `${sortKey}:${sortDir}` as `${SessionSortKey}:${SessionSortDir}`
+  const hasActiveFilters =
+    Boolean(search.trim()) ||
+    statusFilter !== 'all' ||
+    sortKey !== 'checked' ||
+    sortDir !== 'desc'
 
   const checkLogItems = useMemo(() => sortCheckLogItems(checkResults), [checkResults])
   const checkLogStats = useMemo(() => calcCheckLogStats(checkResults), [checkResults])
   const showCheckLog = checkLogVisible && (checking || checkResults.length > 0)
 
-  function setSort(nextKey: SessionSortKey) {
-    if (sortKey === nextKey) {
-      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'))
-      return
-    }
-    setSortKey(nextKey)
-    setSortDir(nextKey === 'checked' ? 'desc' : 'asc')
-  }
-
-  function sortPillLabel(key: SessionSortKey, label: string): string {
-    if (sortKey !== key) return label
-    return `${label} ${sortDir === 'asc' ? '↑' : '↓'}`
+  function handleSortChange(value: string) {
+    const [key, dir] = value.split(':') as [SessionSortKey, SessionSortDir]
+    setSortKey(key)
+    setSortDir(dir)
   }
 
   function clearFilters() {
     setSearch('')
     setStatusFilter('all')
+    setSortKey('checked')
+    setSortDir('desc')
   }
 
   const {
@@ -877,48 +930,49 @@ export function SessionsPage() {
               autoComplete="off"
             />
 
-            <div className="sessions-toolbar-block">
-              <span className="sessions-toolbar-label">Trạng thái</span>
-              <div className="sessions-filter-pills">
-                {STATUS_FILTER_OPTIONS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`sessions-filter-pill sessions-filter-pill--${item.id}${statusFilter === item.id ? ' sessions-filter-pill--selected' : ''}`}
-                    onClick={() => setStatusFilter(item.id)}
-                  >
-                    {item.label}
-                    <span>{filterCounts[item.id]}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+            <div className="sessions-toolbar-filters">
+              <label className="sessions-toolbar-field">
+                <span className="sessions-toolbar-label">Trạng thái</span>
+                <select
+                  className="sessions-toolbar-select"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as SessionStatusFilter)}
+                  aria-label="Lọc theo trạng thái"
+                >
+                  {STATUS_FILTER_OPTIONS.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.label} ({filterCounts[item.id]})
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            <div className="sessions-toolbar-block">
-              <span className="sessions-toolbar-label">Sắp xếp</span>
-              <div className="sessions-sort-pills">
-                {SORT_OPTIONS.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`sessions-sort-pill${sortKey === item.id ? ' sessions-sort-pill--active' : ''}`}
-                    onClick={() => setSort(item.id)}
-                  >
-                    {sortPillLabel(item.id, item.label)}
-                  </button>
-                ))}
-              </div>
-            </div>
+              <label className="sessions-toolbar-field">
+                <span className="sessions-toolbar-label">Sắp xếp</span>
+                <select
+                  className="sessions-toolbar-select"
+                  value={sortValue}
+                  onChange={(e) => handleSortChange(e.target.value)}
+                  aria-label="Sắp xếp danh sách"
+                >
+                  {SORT_DROPDOWN_OPTIONS.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-            {hasActiveFilters ? (
-              <button
-                type="button"
-                className="btn btn--ghost btn--sm sessions-clear-filters"
-                onClick={clearFilters}
-              >
-                Xóa bộ lọc
-              </button>
-            ) : null}
+              {hasActiveFilters ? (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--sm sessions-clear-filters"
+                  onClick={clearFilters}
+                >
+                  Xóa bộ lọc
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : null}
 
@@ -973,9 +1027,12 @@ export function SessionsPage() {
                     >
                       <td>
                         <div className="sessions-phone-cell">
-                          <span className="sessions-avatar" aria-hidden>
-                            {sessionInitials(phone, meta, display)}
-                          </span>
+                          <SessionAvatar
+                            phone={phone}
+                            label={sessionAvatarLabel(meta, display)}
+                            hasAvatar={meta?.has_avatar}
+                            avatarUpdatedAt={meta?.avatar_updated_at}
+                          />
                           <span className="phone">{phone}</span>
                         </div>
                       </td>
@@ -1029,8 +1086,8 @@ export function SessionsPage() {
                           type="button"
                           className="btn btn--sm btn--danger btn--icon-text"
                           disabled={isDeleting}
-                          onClick={() => void handleDelete(phone)}
-                          title="Xóa session"
+                          onClick={() => requestDelete(phone)}
+                          title="Xóa khỏi tool"
                         >
                           {isDeleting ? '…' : 'Xóa'}
                         </button>
@@ -1058,169 +1115,46 @@ export function SessionsPage() {
         )}
       </section>
 
-      {selectedPhone && (
-        <div className="modal-backdrop" onClick={closeModal}>
-          <div className="modal modal--wide" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>{selectedPhone}</h3>
-              <button type="button" className="btn btn--icon" onClick={closeModal}>
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              {modalLoading ? (
-                <p className="muted">Đang tải…</p>
-              ) : (
-                <>
-                  <h4 className="modal-section-title">File session</h4>
-                  {detailData && (
-                    <>
-                      <div className="detail-row">
-                        <span>Tồn tại</span>
-                        <strong>{detailData.exists ? 'Có' : 'Không'}</strong>
-                      </div>
-                      <div className="detail-row">
-                        <span>Kích thước</span>
-                        <strong>{formatBytes(detailData.size_bytes)}</strong>
-                      </div>
-                      <div className="detail-row">
-                        <span>Sửa lần cuối</span>
-                        <strong>{formatDate(detailData.modified_at)}</strong>
-                      </div>
-                      <div className="detail-row">
-                        <span>Journal file</span>
-                        <strong>{detailData.has_journal ? 'Có' : 'Không'}</strong>
-                      </div>
-                      {detailData.session_file && (
-                        <p className="detail-message">
-                          <code className="session-path">{detailData.session_file}</code>
-                        </p>
-                      )}
-                    </>
-                  )}
+      {selectedPhone ? (
+        <SessionDetailModal
+          phone={selectedPhone}
+          loading={modalLoading}
+          detailData={detailData}
+          meData={meData}
+          deleting={deletingPhone === selectedPhone}
+          deleteConfirmOpen={deleteConfirmPhone === selectedPhone}
+          onClose={closeModal}
+          onDelete={requestDelete}
+          onRecheck={(phone) => void handleCheckOne(phone)}
+          rechecking={checkingPhone === selectedPhone}
+          onProfileUpdated={() => void handleRefreshDetail(selectedPhone)}
+        />
+      ) : null}
 
-                  <h4 className="modal-section-title">Metadata DB</h4>
-                  {detailData?.db_metadata ? (
-                    <>
-                      <div className="detail-row">
-                        <span>Nguồn</span>
-                        <strong>{detailData.db_metadata.source}</strong>
-                      </div>
-                      <div className="detail-row">
-                        <span>Trạng thái DB</span>
-                        <StatusBadge status={detailData.db_metadata.status} />
-                      </div>
-                      {detailData.db_metadata.display_name ? (
-                        <div className="detail-row">
-                          <span>Tên hiển thị</span>
-                          <strong>{detailData.db_metadata.display_name}</strong>
-                        </div>
-                      ) : null}
-                      {detailData.db_metadata.telegram_user_id ? (
-                        <div className="detail-row">
-                          <span>Telegram ID</span>
-                          <strong>{detailData.db_metadata.telegram_user_id}</strong>
-                        </div>
-                      ) : null}
-                      <div className="detail-row">
-                        <span>Import lúc</span>
-                        <strong>{formatDate(detailData.db_metadata.imported_at)}</strong>
-                      </div>
-                      <div className="detail-row">
-                        <span>Sync lần cuối</span>
-                        <strong>{formatDate(detailData.db_metadata.last_synced_at)}</strong>
-                      </div>
-                      {detailData.db_metadata.last_error && (
-                        <p className="detail-message">{detailData.db_metadata.last_error}</p>
-                      )}
-                      {detailData.db_metadata.recent_audit.length > 0 ? (
-                        <>
-                          <h4 className="modal-section-title">Audit gần đây</h4>
-                          <ul className="session-audit-list">
-                            {detailData.db_metadata.recent_audit.map((item) => (
-                              <li key={`${item.action}-${item.created_at}`}>
-                                <span className="session-audit-action">
-                                  {auditActionLabel(item.action)}
-                                </span>
-                                <span className="muted">{formatDate(item.created_at)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                          {selectedPhone ? (
-                            <Link
-                              to={`/audit?phone=${encodeURIComponent(selectedPhone)}`}
-                              className="session-audit-link"
-                            >
-                              Xem toàn bộ audit →
-                            </Link>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </>
-                  ) : (
-                    <p className="muted">
-                      Chưa có metadata — bấm <strong>Kiểm tra tất cả</strong> để sync DB.
-                    </p>
-                  )}
-
-                  <h4 className="modal-section-title">Tài khoản Telegram</h4>
-                  {meData && (
-                    <>
-                      <div className="detail-row">
-                        <span>Trạng thái</span>
-                        <StatusBadge status={meData.status} />
-                      </div>
-                      <div className="detail-row">
-                        <span>Telegram ID</span>
-                        <strong>{meData.me_id ?? '—'}</strong>
-                      </div>
-                      <div className="detail-row">
-                        <span>Họ tên</span>
-                        <strong>
-                          {[meData.first_name, meData.last_name].filter(Boolean).join(' ') || '—'}
-                        </strong>
-                      </div>
-                      <div className="detail-row">
-                        <span>Username</span>
-                        <strong>{meData.username ? `@${meData.username}` : '—'}</strong>
-                      </div>
-                      {meData.message && (
-                        <p className="detail-message">{meData.message}</p>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-            {selectedPhone && !modalLoading && (
-              <div className="modal-foot sessions-modal-foot">
-                <div className="sessions-modal-links">
-                  <Link
-                    to={`/security?phone=${encodeURIComponent(selectedPhone)}`}
-                    className="btn btn--ghost btn--sm"
-                  >
-                    Bảo mật
-                  </Link>
-                  <Link
-                    to={`/audit?phone=${encodeURIComponent(selectedPhone)}`}
-                    className="btn btn--ghost btn--sm"
-                  >
-                    Audit
-                  </Link>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn--danger"
-                  disabled={deletingPhone === selectedPhone}
-                  onClick={() => void handleDelete(selectedPhone)}
-                >
-                  {deletingPhone === selectedPhone ? 'Đang xóa…' : 'Xóa session'}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        open={Boolean(deleteConfirmPhone)}
+        title="Xóa khỏi tool?"
+        description={
+          deleteConfirmPhone ? (
+            <>
+              Account{' '}
+              <strong className="confirm-modal-phone">{deleteConfirmPhone}</strong> sẽ bị gỡ
+              khỏi tool.
+            </>
+          ) : null
+        }
+        details={[
+          'File .session và pending_auth trên máy chủ sẽ bị xóa',
+          'Không đăng xuất thiết bị trên Telegram',
+        ]}
+        confirmLabel="Xóa khỏi tool"
+        loading={Boolean(deleteConfirmPhone && deletingPhone === deleteConfirmPhone)}
+        onConfirm={() => void confirmDelete()}
+        onCancel={() => {
+          if (deletingPhone) return
+          setDeleteConfirmPhone(null)
+        }}
+      />
     </div>
   )
 }

@@ -48,9 +48,14 @@ class Settings:
         if not self.telegram_api_id or not self.telegram_api_hash:
             raise ValueError("Missing TELEGRAM_API_ID or TELEGRAM_API_HASH in .env")
 
+    avatar_dir: Path = resolve_project_path(
+        os.getenv("AVATAR_DIR", "runtime/avatars")
+    )
+
     def ensure_runtime_dirs(self) -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         self.session_lock_dir.mkdir(parents=True, exist_ok=True)
+        self.avatar_dir.mkdir(parents=True, exist_ok=True)
         (BASE_DIR / "runtime").mkdir(parents=True, exist_ok=True)
 
 
