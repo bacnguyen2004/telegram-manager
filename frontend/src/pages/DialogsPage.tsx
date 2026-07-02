@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
 import { ForwardMessageModal } from '../components/ForwardMessageModal'
@@ -106,8 +107,10 @@ function ChatEmptyIcon() {
 }
 
 export function DialogsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const accounts = useSessionAccounts()
-  const [phone, setPhone] = useState('')
+  const [phone, setPhone] = useState(() => searchParams.get('phone')?.trim() ?? '')
+  const urlAutoLoadRef = useRef('')
   const [dialogs, setDialogs] = useState<DialogItem[]>([])
   const [counts, setCounts] = useState<DialogCounts | null>(null)
   const [selected, setSelected] = useState<DialogItem | null>(null)
@@ -761,6 +764,78 @@ export function DialogsPage() {
     setSuccess('')
   }
 
+  const loadDialogs = useCallback(async (targetPhone: string) => {
+    const activePhone = targetPhone.trim()
+    if (!activePhone) return
+
+    setLoadingDialogs(true)
+    resetAlerts()
+    setDialogs([])
+    setCounts(null)
+    setSelected(null)
+    selectedDialogIdRef.current = null
+    messagesRequestSeqRef.current += 1
+    setMessages([])
+    setMessagesTitle('')
+    setReactionsPolicy(null)
+    setReplyTo(null)
+    setUnreadDividerAfterId(null)
+    setStreamMinId(0)
+    setServerSearchResults([])
+    setLoadedPhotoIds(new Set())
+    try {
+      const res = await api.listDialogs(activePhone)
+      if (!res.success || !res.data) {
+        setError(res.error ?? 'Không tải được danh sách chat')
+        return
+      }
+      if (res.data.status === 'error') {
+        setError(res.data.message)
+        return
+      }
+      setDialogs(mergeDialogsWithReadState(activePhone, res.data.dialogs))
+      setCounts(res.data.counts)
+      setSuccess(`Tải ${res.data.total} chat`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không kết nối được API.')
+    } finally {
+      setLoadingDialogs(false)
+    }
+  }, [])
+
+  const handlePhoneChange = useCallback(
+    (next: string) => {
+      setPhone(next)
+      urlAutoLoadRef.current = ''
+      const params = new URLSearchParams(searchParams)
+      const trimmed = next.trim()
+      if (trimmed) params.set('phone', trimmed)
+      else params.delete('phone')
+      setSearchParams(params, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  useEffect(() => {
+    const phoneParam = searchParams.get('phone')?.trim() ?? ''
+    if (!phoneParam) {
+      urlAutoLoadRef.current = ''
+      return
+    }
+    if (accounts.loading) return
+
+    if (!accounts.sessions.includes(phoneParam)) {
+      setError(`Không tìm thấy session ${phoneParam}`)
+      return
+    }
+
+    setPhone((current) => (current === phoneParam ? current : phoneParam))
+
+    if (urlAutoLoadRef.current === phoneParam) return
+    urlAutoLoadRef.current = phoneParam
+    void loadDialogs(phoneParam)
+  }, [searchParams, accounts.loading, accounts.sessions, loadDialogs])
+
   function clearSelectedMedia() {
     if (mediaPreview) URL.revokeObjectURL(mediaPreview)
     setSelectedMedia(null)
@@ -1062,26 +1137,78 @@ export function DialogsPage() {
     }, 80)
   }, [loadingMessages, messages.length, selected, scrollToLastRead, scrollToLatest, updateJumpButton])
 
-  function handleMediaSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  function applySelectedMediaFile(file: File) {
     const validationError = validateChatMediaFile(file)
     if (validationError) {
       setError(validationError)
       clearSelectedMedia()
-      return
+      return false
     }
     const kind = detectChatMediaKind(file)
     if (!kind) {
       setError('Không nhận dạng được loại file.')
       clearSelectedMedia()
-      return
+      return false
     }
     resetAlerts()
     if (mediaPreview) URL.revokeObjectURL(mediaPreview)
     setSelectedMedia(file)
     setSelectedMediaKind(kind)
     setMediaPreview(kind === 'image' ? URL.createObjectURL(file) : null)
+    return true
+  }
+
+  function normalizePastedFile(file: File, mimeType: string): File {
+    const type = (mimeType || file.type || 'image/png').split(';')[0].trim().toLowerCase()
+    if (file.name && file.name !== 'image.png' && !file.name.startsWith('blob')) {
+      return file
+    }
+    const ext =
+      type === 'image/jpeg'
+        ? 'jpg'
+        : type === 'image/webp'
+          ? 'webp'
+          : type === 'image/gif'
+            ? 'gif'
+            : type === 'video/mp4'
+              ? 'mp4'
+              : type === 'video/webm'
+                ? 'webm'
+                : 'png'
+    return new File([file], `paste-${Date.now()}.${ext}`, { type })
+  }
+
+  function handleMediaSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    applySelectedMediaFile(file)
+  }
+
+  function handleComposePaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    if (sending || loadingMessages) return
+
+    const items = e.clipboardData?.items
+    if (!items?.length) return
+
+    for (const item of items) {
+      if (item.kind !== 'file') continue
+      const raw = item.getAsFile()
+      if (!raw) continue
+
+      const mimeType = (item.type || raw.type || '').split(';')[0].trim().toLowerCase()
+      const file = normalizePastedFile(raw, mimeType)
+      if (!detectChatMediaKind(file)) continue
+
+      if (editingMessage) {
+        e.preventDefault()
+        setError('Không sửa tin kèm file mới — chỉ sửa chữ')
+        return
+      }
+
+      e.preventDefault()
+      applySelectedMediaFile(file)
+      return
+    }
   }
 
   const waitForScrollToMessage = useCallback(
@@ -1259,39 +1386,13 @@ export function DialogsPage() {
 
   async function handleLoadDialogs(e: React.FormEvent) {
     e.preventDefault()
-    setLoadingDialogs(true)
-    resetAlerts()
-    setDialogs([])
-    setCounts(null)
-    setSelected(null)
-    selectedDialogIdRef.current = null
-    messagesRequestSeqRef.current += 1
-    setMessages([])
-    setMessagesTitle('')
-    setReactionsPolicy(null)
-    setReplyTo(null)
-    setUnreadDividerAfterId(null)
-    setStreamMinId(0)
-    setServerSearchResults([])
-    setLoadedPhotoIds(new Set())
-    try {
-      const res = await api.listDialogs(phone)
-      if (!res.success || !res.data) {
-        setError(res.error ?? 'Không tải được danh sách chat')
-        return
-      }
-      if (res.data.status === 'error') {
-        setError(res.data.message)
-        return
-      }
-      setDialogs(mergeDialogsWithReadState(phone, res.data.dialogs))
-      setCounts(res.data.counts)
-      setSuccess(`Tải ${res.data.total} chat`)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không kết nối được API.')
-    } finally {
-      setLoadingDialogs(false)
-    }
+    urlAutoLoadRef.current = phone.trim()
+    const params = new URLSearchParams(searchParams)
+    const trimmed = phone.trim()
+    if (trimmed) params.set('phone', trimmed)
+    else params.delete('phone')
+    setSearchParams(params, { replace: true })
+    await loadDialogs(phone)
   }
 
   const mergePinnedMessages = useCallback(
@@ -1868,7 +1969,7 @@ export function DialogsPage() {
         >
           <PhoneSelect
             value={phone}
-            onChange={setPhone}
+            onChange={handlePhoneChange}
             allowManual={false}
             sessions={accounts.sessions}
             metaByPhone={accounts.metaByPhone}
@@ -2641,6 +2742,7 @@ export function DialogsPage() {
                     }
                     value={draftText}
                     onChange={(e) => setDraftText(e.target.value)}
+                    onPaste={handleComposePaste}
                     disabled={sending || loadingMessages}
                     maxLength={selectedMedia ? 1024 : 4096}
                   />

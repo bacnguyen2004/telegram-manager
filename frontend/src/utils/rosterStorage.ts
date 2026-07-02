@@ -87,6 +87,85 @@ export function getCellValue(
   return store.rows[phone]?.[columnKey] ?? ''
 }
 
+export function getMergedRowFields(
+  store: RosterStore,
+  phone: string,
+  apiFields?: Record<string, string> | null,
+): Record<string, string> {
+  const fromApi = apiFields ?? {}
+  const fromStore = store.rows[phone] ?? {}
+  return { ...fromApi, ...fromStore }
+}
+
+export function getMergedCellValue(
+  store: RosterStore,
+  phone: string,
+  columnKey: string,
+  apiFields?: Record<string, string> | null,
+): string {
+  return getMergedRowFields(store, phone, apiFields)[columnKey]?.trim() ?? ''
+}
+
+export type RosterFillFilter = 'all' | 'filled' | 'empty'
+
+export function rowMatchesFillFilter(
+  store: RosterStore,
+  phone: string,
+  columns: RosterColumn[],
+  fillFilter: RosterFillFilter,
+  columnScope: string,
+  apiFields?: Record<string, string> | null,
+): boolean {
+  if (fillFilter === 'all') return true
+
+  const merged = getMergedRowFields(store, phone, apiFields)
+  const hasAnyFilled = columns.some((col) => Boolean(merged[col.key]?.trim()))
+
+  if (columnScope !== 'all') {
+    const hasColumnValue = Boolean(merged[columnScope]?.trim())
+    return fillFilter === 'filled' ? hasColumnValue : !hasColumnValue
+  }
+
+  return fillFilter === 'filled' ? hasAnyFilled : !hasAnyFilled
+}
+
+export function rowMatchesRosterSearch(
+  store: RosterStore,
+  phone: string,
+  columns: RosterColumn[],
+  query: string,
+  columnScope: string,
+  fields: {
+    phone: string
+    name: string
+    username: string
+    status: string
+  },
+  apiFields?: Record<string, string> | null,
+): boolean {
+  const normalized = query.trim().toLowerCase()
+  if (!normalized) return true
+
+  const merged = getMergedRowFields(store, phone, apiFields)
+  const tokens = normalized.split(/\s+/).filter(Boolean)
+
+  function fieldHaystack(): string[] {
+    if (columnScope === 'all') {
+      return [
+        fields.phone,
+        fields.name,
+        fields.username,
+        fields.status,
+        ...columns.map((col) => merged[col.key] ?? ''),
+      ]
+    }
+    return [fields.phone, merged[columnScope] ?? '']
+  }
+
+  const haystack = fieldHaystack().join(' ').toLowerCase()
+  return tokens.every((token) => haystack.includes(token))
+}
+
 export function setCellValue(
   store: RosterStore,
   phone: string,

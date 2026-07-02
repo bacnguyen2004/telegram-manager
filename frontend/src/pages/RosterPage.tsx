@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import './RosterPage.css'
 import { api } from '../api/client'
@@ -10,11 +11,15 @@ import { formatDate, formatRelativeDate } from '../utils/format'
 import { formatUsername } from '../utils/sessionDisplay'
 import {
   buildRosterCsv,
-  getCellValue,
+  getMergedCellValue,
+  getMergedRowFields,
   parseRosterCsvForApi,
   rosterDataToStore,
+  rowMatchesFillFilter,
+  rowMatchesRosterSearch,
   setCellValue,
   type RosterColumn,
+  type RosterFillFilter,
   type RosterStore,
 } from '../utils/rosterStorage'
 
@@ -40,6 +45,281 @@ const FIXED_COLUMNS: { key: FixedSortKey; label: string; className: string }[] =
 
 const PATCH_DEBOUNCE_MS = 600
 const DEFAULT_PAGE_SIZE = 20
+const COLUMN_LABEL_MAX = 128
+const COLUMN_SUGGESTIONS = [
+  'Discord',
+  'WhatsApp',
+  'MEXC UID',
+  'Bybit UID',
+  'Binance email',
+  'Ghi chú',
+] as const
+
+type RosterColumnModalMode = 'add' | 'rename'
+
+function RosterCopyIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M7 15H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"
+        stroke="currentColor"
+        strokeWidth="1.75"
+      />
+    </svg>
+  )
+}
+
+function RosterCheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 12.5 9.5 17 19 7"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function RosterChatIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 18.5 5 20V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9.5L7 18.5Z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function RosterProfileIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="8" r="3.25" stroke="currentColor" strokeWidth="1.75" />
+      <path
+        d="M5.5 19c.9-3.1 3.4-5 6.5-5s5.6 1.9 6.5 5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function RosterColumnIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <rect x="4" y="5" width="16" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M9 5v14M15 5v14M4 11h16M4 15h16" stroke="currentColor" strokeWidth="1.75" />
+    </svg>
+  )
+}
+
+function RosterSearchIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="11" cy="11" r="6.5" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M16 16 20 20" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function RosterPlusIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path d="M12 6v12M6 12h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function RosterEditIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 17.5V20h2.5L17 9.5 14.5 7 4 17.5Z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path d="m13.5 8.5 2 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function RosterTrashIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M5 7h14M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7m2 0-.6 11.2c0 .99-.8 1.8-1.8 1.8H9.4c-1 0-1.8-.81-1.8-1.8L7 7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+interface RosterColumnModalProps {
+  mode: RosterColumnModalMode
+  label: string
+  originalLabel?: string
+  submitDisabled: boolean
+  onLabelChange: (value: string) => void
+  onSubmit: () => void
+  onClose: () => void
+}
+
+function RosterColumnModal({
+  mode,
+  label,
+  originalLabel,
+  submitDisabled,
+  onLabelChange,
+  onSubmit,
+  onClose,
+}: RosterColumnModalProps) {
+  const trimmed = label.trim()
+  const isAdd = mode === 'add'
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [onClose])
+
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [])
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    if (submitDisabled) return
+    onSubmit()
+  }
+
+  return createPortal(
+    <div className="roster-col-modal-backdrop" onClick={onClose}>
+      <div
+        className="roster-col-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="roster-col-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button
+          type="button"
+          className="roster-col-modal-close"
+          aria-label="Đóng"
+          onClick={onClose}
+        >
+          ×
+        </button>
+
+        <div className="roster-col-modal-icon" aria-hidden>
+          <RosterColumnIcon />
+        </div>
+
+        <h3 id="roster-col-modal-title" className="roster-col-modal-title">
+          {isAdd ? 'Thêm cột mới' : 'Đổi tên cột'}
+        </h3>
+        <p className="roster-col-modal-desc">
+          {isAdd
+            ? 'Cột xuất hiện ngay trên bảng — dùng lưu UID sàn, Discord, ghi chú…'
+            : (
+              <>
+                Đổi tên hiển thị cột <strong>{originalLabel}</strong>. Dữ liệu các ô giữ nguyên.
+              </>
+            )}
+        </p>
+
+        <form className="roster-col-modal-form" onSubmit={handleSubmit}>
+          <label className="roster-col-modal-field" htmlFor="roster-col-modal-input">
+            <div className="roster-col-modal-field-head">
+              <span className="roster-col-modal-field-label">Tên cột</span>
+              <span
+                className={`roster-col-modal-field-hint${trimmed.length >= COLUMN_LABEL_MAX - 8 ? ' roster-col-modal-field-hint--warn' : ''}`}
+              >
+                {trimmed.length}/{COLUMN_LABEL_MAX}
+              </span>
+            </div>
+            <div className="roster-col-modal-input-wrap">
+              <span className="roster-col-modal-input-icon" aria-hidden>
+                <RosterColumnIcon />
+              </span>
+              <input
+                id="roster-col-modal-input"
+                className="roster-col-modal-input"
+                type="text"
+                autoFocus
+                value={label}
+                maxLength={COLUMN_LABEL_MAX}
+                placeholder={isAdd ? 'VD: Discord, MEXC UID…' : 'Nhập tên mới'}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => onLabelChange(event.target.value)}
+              />
+              {trimmed ? (
+                <button
+                  type="button"
+                  className="roster-col-modal-input-clear"
+                  aria-label="Xóa tên cột"
+                  onClick={() => onLabelChange('')}
+                >
+                  ×
+                </button>
+              ) : null}
+            </div>
+            {!isAdd && originalLabel ? (
+              <p className="roster-col-modal-current">
+                Hiện tại: <strong>{originalLabel}</strong>
+              </p>
+            ) : null}
+          </label>
+
+          {isAdd ? (
+            <div className="roster-col-suggestions">
+              <span className="roster-col-suggestions-label">Gợi ý nhanh</span>
+              <div className="roster-col-suggestions-list">
+                {COLUMN_SUGGESTIONS.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`roster-col-suggestion${trimmed === item ? ' roster-col-suggestion--active' : ''}`}
+                    onClick={() => onLabelChange(item)}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="roster-col-modal-actions">
+            <button type="button" className="btn btn--ghost" onClick={onClose}>
+              Huỷ
+            </button>
+            <button type="submit" className="btn btn--primary" disabled={submitDisabled}>
+              {isAdd ? 'Thêm cột' : 'Lưu tên'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>,
+    document.body,
+  )
+}
 
 function compareText(a: string, b: string): number {
   return a.localeCompare(b, 'vi', { sensitivity: 'base', numeric: true })
@@ -65,6 +345,7 @@ export function RosterPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [search, setSearch] = useState('')
+  const [fillFilter, setFillFilter] = useState<RosterFillFilter>('all')
   const [sortKey, setSortKey] = useState<SortKey>('phone')
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [success, setSuccess] = useState('')
@@ -74,7 +355,7 @@ export function RosterPage() {
   const [newColumnLabel, setNewColumnLabel] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
-  const [dataVersion, setDataVersion] = useState(0)
+  const [copiedPhone, setCopiedPhone] = useState<string | null>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
   const patchTimersRef = useRef<Map<string, number>>(new Map())
 
@@ -98,7 +379,6 @@ export function RosterPage() {
       }
       setSheetRows(res.data.rows ?? [])
       setStore(rosterDataToStore(res.data.columns, res.data.rows))
-      setDataVersion((value) => value + 1)
       setPage(1)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không tải được sổ acc')
@@ -118,6 +398,12 @@ export function RosterPage() {
   }, [success])
 
   useEffect(() => {
+    if (!copiedPhone) return
+    const timer = window.setTimeout(() => setCopiedPhone(null), 2000)
+    return () => window.clearTimeout(timer)
+  }, [copiedPhone])
+
+  useEffect(() => {
     return () => {
       for (const timer of patchTimersRef.current.values()) {
         window.clearTimeout(timer)
@@ -126,27 +412,41 @@ export function RosterPage() {
     }
   }, [])
 
+  const sheetRowsByPhone = useMemo(
+    () => new Map(sheetRows.map((row) => [row.phone, row])),
+    [sheetRows],
+  )
+
   const tableRows = useMemo<RosterDisplayRow[]>(() => {
     return sheetRows.map(toDisplayRow)
   }, [sheetRows])
 
   const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase()
-    if (!query) return tableRows
-
     return tableRows.filter((row) => {
-      const haystack = [
+      const apiFields = sheetRowsByPhone.get(row.phone)?.custom_fields
+
+      if (
+        !rowMatchesFillFilter(store, row.phone, store.columns, fillFilter, 'all', apiFields)
+      ) {
+        return false
+      }
+
+      return rowMatchesRosterSearch(
+        store,
         row.phone,
-        row.name,
-        row.username,
-        row.status,
-        ...store.columns.map((col) => getCellValue(store, row.phone, col.key)),
-      ]
-        .join(' ')
-        .toLowerCase()
-      return haystack.includes(query)
+        store.columns,
+        search,
+        'all',
+        {
+          phone: row.phone,
+          name: row.name,
+          username: row.username,
+          status: row.status,
+        },
+        apiFields,
+      )
     })
-  }, [tableRows, search, store])
+  }, [tableRows, search, fillFilter, store, sheetRowsByPhone])
 
   const sortedRows = useMemo(() => {
     const rows = [...filteredRows]
@@ -170,23 +470,50 @@ export function RosterPage() {
         left = a.synced
         right = b.synced
       } else {
-        left = getCellValue(store, a.phone, sortKey)
-        right = getCellValue(store, b.phone, sortKey)
+        left = getMergedCellValue(
+          store,
+          a.phone,
+          sortKey,
+          sheetRowsByPhone.get(a.phone)?.custom_fields,
+        )
+        right = getMergedCellValue(
+          store,
+          b.phone,
+          sortKey,
+          sheetRowsByPhone.get(b.phone)?.custom_fields,
+        )
       }
 
       const cmp = compareText(left, right)
       return sortDir === 'asc' ? cmp : -cmp
     })
     return rows
-  }, [filteredRows, sortKey, sortDir, store])
+  }, [filteredRows, sortKey, sortDir, store, sheetRowsByPhone])
 
   const filledCellCount = useMemo(() => {
     let count = 0
-    for (const fields of Object.values(store.rows)) {
-      count += Object.values(fields).filter((value) => value.trim()).length
+    for (const row of sheetRows) {
+      const merged = getMergedRowFields(store, row.phone, row.custom_fields)
+      count += Object.values(merged).filter((value) => value.trim()).length
     }
     return count
-  }, [store.rows])
+  }, [store, sheetRows])
+
+  const filterCounts = useMemo(() => {
+    let filled = 0
+    let empty = 0
+    for (const row of tableRows) {
+      const apiFields = sheetRowsByPhone.get(row.phone)?.custom_fields
+      if (
+        rowMatchesFillFilter(store, row.phone, store.columns, 'filled', 'all', apiFields)
+      ) {
+        filled += 1
+      } else {
+        empty += 1
+      }
+    }
+    return { all: tableRows.length, filled, empty }
+  }, [tableRows, store, sheetRowsByPhone])
 
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize))
 
@@ -201,7 +528,16 @@ export function RosterPage() {
 
   useEffect(() => {
     setPage(1)
-  }, [search, pageSize])
+  }, [search, fillFilter, pageSize])
+
+  const copyPhone = useCallback(async (phone: string) => {
+    try {
+      await navigator.clipboard.writeText(phone)
+      setCopiedPhone(phone)
+    } catch {
+      setError('Không copy được số điện thoại')
+    }
+  }, [])
 
   const schedulePatch = useCallback((phone: string, columnKey: string, value: string) => {
     const timerKey = `${phone}:${columnKey}`
@@ -238,14 +574,13 @@ export function RosterPage() {
     })
   }, [])
 
+  const handleCellChange = useCallback((phone: string, columnKey: string, value: string) => {
+    setStore((prev) => setCellValue(prev, phone, columnKey, value))
+  }, [])
+
   const handleCellBlur = useCallback(
     (phone: string, columnKey: string, value: string) => {
-      setStore((prev) => {
-        const previous = getCellValue(prev, phone, columnKey)
-        if (previous === value) return prev
-        schedulePatch(phone, columnKey, value)
-        return setCellValue(prev, phone, columnKey, value)
-      })
+      schedulePatch(phone, columnKey, value)
     },
     [schedulePatch],
   )
@@ -274,6 +609,30 @@ export function RosterPage() {
       setError(err instanceof Error ? err.message : 'Không thêm được cột')
     }
   }, [newColumnLabel])
+
+  const columnModalMode: RosterColumnModalMode | null = addColumnOpen
+    ? 'add'
+    : renameColumn
+      ? 'rename'
+      : null
+
+  function closeColumnModal() {
+    setAddColumnOpen(false)
+    setRenameColumn(null)
+    setNewColumnLabel('')
+  }
+
+  function openAddColumnModal() {
+    setRenameColumn(null)
+    setNewColumnLabel('')
+    setAddColumnOpen(true)
+  }
+
+  function openRenameColumnModal(column: RosterColumn) {
+    setAddColumnOpen(false)
+    setRenameColumn(column)
+    setNewColumnLabel(column.label)
+  }
 
   const handleRenameColumn = useCallback(async () => {
     if (!renameColumn) return
@@ -391,6 +750,17 @@ export function RosterPage() {
             Bảng kiểu Excel — map Telegram với BTSE, Binance, Discord… Cột Telegram từ{' '}
             <Link to="/sessions">Sessions</Link>; cột tùy chỉnh lưu trong database.
           </p>
+          <div className="roster-shortcut-hints" aria-label="Lối tắt">
+            <span className="roster-shortcut-hint">
+              <RosterCopyIcon /> Copy SĐT
+            </span>
+            <span className="roster-shortcut-hint roster-shortcut-hint--chat">
+              <RosterChatIcon /> Chat → Dialogs
+            </span>
+            <span className="roster-shortcut-hint roster-shortcut-hint--profile">
+              <RosterProfileIcon /> Hồ sơ → Telegram ID
+            </span>
+          </div>
         </div>
         <button
           type="button"
@@ -425,18 +795,18 @@ export function RosterPage() {
       </section>
 
       <section className="panel roster-sheet-panel">
-        <div
-          className="roster-toolbar"
-          style={{ padding: '14px 16px', borderBottom: '1px solid var(--border)' }}
-        >
+        <div className="roster-toolbar roster-toolbar--sheet">
           <div className="roster-toolbar-left">
             <button
               type="button"
-              className="btn btn--primary btn--sm"
-              onClick={() => setAddColumnOpen(true)}
+              className="roster-add-col-btn"
+              onClick={openAddColumnModal}
               disabled={!databaseEnabled || loading}
             >
-              + Cột
+              <span className="roster-add-col-btn-icon" aria-hidden>
+                <RosterPlusIcon />
+              </span>
+              <span>Thêm cột</span>
             </button>
             <button type="button" className="btn btn--ghost btn--sm" onClick={handleExport}>
               Export CSV
@@ -461,15 +831,46 @@ export function RosterPage() {
               }}
             />
           </div>
-          <div className="roster-toolbar-right roster-search">
+        </div>
+
+        <div className="roster-search-bar">
+          <div className="roster-search-wrap">
+            <span className="roster-search-icon" aria-hidden>
+              <RosterSearchIcon />
+            </span>
             <input
               type="search"
-              className="input"
-              placeholder="Tìm SĐT, tên, UID, email…"
+              className="roster-search-input"
+              placeholder="Tìm SĐT, tên, @username, UID sàn…"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              aria-label="Tìm trong sổ acc"
             />
+            {search ? (
+              <button
+                type="button"
+                className="roster-search-clear"
+                aria-label="Xóa từ khóa tìm"
+                onClick={() => setSearch('')}
+              >
+                ×
+              </button>
+            ) : null}
           </div>
+
+          <label className="roster-filter-field">
+            <span className="roster-filter-label">Dữ liệu</span>
+            <select
+              className="roster-filter-select"
+              value={fillFilter}
+              onChange={(event) => setFillFilter(event.target.value as RosterFillFilter)}
+              aria-label="Lọc dòng đã nhập"
+            >
+              <option value="all">Tất cả ({filterCounts.all})</option>
+              <option value="filled">Đã nhập ({filterCounts.filled})</option>
+              <option value="empty">Chưa nhập ({filterCounts.empty})</option>
+            </select>
+          </label>
         </div>
 
         <div className="roster-sheet-wrap">
@@ -479,7 +880,7 @@ export function RosterPage() {
             <div className="roster-empty">
               {sheetRows.length === 0
                 ? 'Chưa có session — thêm ở Sessions hoặc Tài khoản.'
-                : 'Không có dòng khớp bộ lọc.'}
+                : 'Không có dòng khớp bộ lọc hiện tại.'}
             </div>
           ) : pagedRows.length === 0 ? (
             <div className="roster-empty">Không có dòng trên trang này.</div>
@@ -501,12 +902,17 @@ export function RosterPage() {
                       </button>
                     </th>
                   ))}
+                  <th className="roster-col--actions">
+                    <div className="roster-th-static">
+                      <span className="roster-th-label">Lối tắt</span>
+                    </div>
+                  </th>
                   {store.columns.map((col) => (
                     <th key={col.key} className="roster-col--custom">
-                      <div className="roster-th-actions">
+                      <div className="roster-custom-th">
                         <button
                           type="button"
-                          className={`roster-th-btn${sortKey === col.key ? ' roster-th-btn--active' : ''}`}
+                          className={`roster-th-btn roster-custom-th-sort${sortKey === col.key ? ' roster-th-btn--active' : ''}`}
                           onClick={() => handleSort(col.key)}
                         >
                           <span className="roster-th-label">{col.label}</span>
@@ -514,27 +920,28 @@ export function RosterPage() {
                             {sortIndicator(sortKey === col.key, sortDir)}
                           </span>
                         </button>
-                        <button
-                          type="button"
-                          className="roster-col-action"
-                          title={`Đổi tên cột ${col.label}`}
-                          onClick={() => {
-                            setRenameColumn(col)
-                            setNewColumnLabel(col.label)
-                          }}
-                          disabled={!databaseEnabled}
-                        >
-                          ✎
-                        </button>
-                        <button
-                          type="button"
-                          className="roster-col-action roster-col-action--danger"
-                          title={`Xóa cột ${col.label}`}
-                          onClick={() => void handleRemoveColumn(col)}
-                          disabled={!databaseEnabled}
-                        >
-                          ×
-                        </button>
+                        <div className="roster-custom-th-menu">
+                          <button
+                            type="button"
+                            className="roster-th-menu-btn"
+                            title={`Đổi tên cột ${col.label}`}
+                            aria-label={`Đổi tên cột ${col.label}`}
+                            onClick={() => openRenameColumnModal(col)}
+                            disabled={!databaseEnabled}
+                          >
+                            <RosterEditIcon />
+                          </button>
+                          <button
+                            type="button"
+                            className="roster-th-menu-btn roster-th-menu-btn--danger"
+                            title={`Xóa cột ${col.label}`}
+                            aria-label={`Xóa cột ${col.label}`}
+                            onClick={() => void handleRemoveColumn(col)}
+                            disabled={!databaseEnabled}
+                          >
+                            <RosterTrashIcon />
+                          </button>
+                        </div>
                       </div>
                     </th>
                   ))}
@@ -544,7 +951,22 @@ export function RosterPage() {
                 {pagedRows.map((row) => (
                   <tr key={row.phone}>
                     <td className="roster-col--phone">
-                      <div className="roster-cell-fixed mono">{row.phone}</div>
+                      <div className="roster-phone-cell">
+                        <span className="roster-phone-value mono">{row.phone}</span>
+                        <button
+                          type="button"
+                          className={`roster-copy-btn${copiedPhone === row.phone ? ' roster-copy-btn--done' : ''}`}
+                          title={copiedPhone === row.phone ? 'Đã copy' : 'Copy SĐT'}
+                          aria-label={
+                            copiedPhone === row.phone
+                              ? `Đã copy ${row.phone}`
+                              : `Copy ${row.phone}`
+                          }
+                          onClick={() => void copyPhone(row.phone)}
+                        >
+                          {copiedPhone === row.phone ? <RosterCheckIcon /> : <RosterCopyIcon />}
+                        </button>
+                      </div>
                     </td>
                     <td>
                       <div className="roster-cell-fixed" title={row.name}>
@@ -569,15 +991,46 @@ export function RosterPage() {
                         {row.synced ? formatRelativeDate(row.synced) : '—'}
                       </div>
                     </td>
+                    <td className="roster-col--actions">
+                      <div className="roster-row-actions">
+                        <Link
+                          to={`/dialogs?phone=${encodeURIComponent(row.phone)}`}
+                          className="roster-quick-btn roster-quick-btn--chat"
+                          title="Mở Dialogs với acc này"
+                        >
+                          <span className="roster-quick-btn-icon">
+                            <RosterChatIcon />
+                          </span>
+                          <span>Chat</span>
+                        </Link>
+                        <Link
+                          to={`/sessions?phone=${encodeURIComponent(row.phone)}`}
+                          className="roster-quick-btn roster-quick-btn--profile"
+                          title="Chi tiết — Telegram ID"
+                        >
+                          <span className="roster-quick-btn-icon">
+                            <RosterProfileIcon />
+                          </span>
+                          <span>Hồ sơ</span>
+                        </Link>
+                      </div>
+                    </td>
                     {store.columns.map((col) => (
                       <td key={`${row.phone}-${col.key}`} className="roster-col--custom">
                         <input
-                          key={`${dataVersion}-${row.phone}-${col.key}`}
                           type="text"
                           className="roster-cell-input"
-                          defaultValue={getCellValue(store, row.phone, col.key)}
+                          value={getMergedCellValue(
+                            store,
+                            row.phone,
+                            col.key,
+                            sheetRowsByPhone.get(row.phone)?.custom_fields,
+                          )}
                           placeholder="—"
                           disabled={!databaseEnabled}
+                          onChange={(event) =>
+                            handleCellChange(row.phone, col.key, event.target.value)
+                          }
                           onBlur={(event) =>
                             handleCellBlur(row.phone, col.key, event.target.value)
                           }
@@ -607,145 +1060,27 @@ export function RosterPage() {
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
           />
-          <span>Sửa ô → blur để lưu · Export/Import CSV</span>
+          <span>Copy SĐT · Chat/Hồ sơ ở cột Lối tắt · Sửa ô blur để lưu</span>
         </div>
       </section>
 
-      {renameColumn ? (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => {
-            setRenameColumn(null)
-            setNewColumnLabel('')
+      {columnModalMode ? (
+        <RosterColumnModal
+          mode={columnModalMode}
+          label={newColumnLabel}
+          originalLabel={renameColumn?.label}
+          submitDisabled={
+            !newColumnLabel.trim() ||
+            (columnModalMode === 'rename' &&
+              newColumnLabel.trim() === renameColumn?.label)
+          }
+          onLabelChange={setNewColumnLabel}
+          onSubmit={() => {
+            if (columnModalMode === 'add') void handleAddColumn()
+            else void handleRenameColumn()
           }}
-        >
-          <div
-            className="modal"
-            role="dialog"
-            aria-labelledby="roster-rename-col-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2 id="roster-rename-col-title">Đổi tên cột</h2>
-              <button
-                type="button"
-                className="btn btn--icon"
-                aria-label="Đóng"
-                onClick={() => {
-                  setRenameColumn(null)
-                  setNewColumnLabel('')
-                }}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <form
-                className="roster-add-col-form"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void handleRenameColumn()
-                }}
-              >
-                <label>
-                  Tên mới
-                  <input
-                    className="input"
-                    autoFocus
-                    value={newColumnLabel}
-                    onChange={(event) => setNewColumnLabel(event.target.value)}
-                  />
-                </label>
-                <p className="muted" style={{ margin: 0, fontSize: 12 }}>
-                  Dữ liệu trong cột giữ nguyên — chỉ đổi tên hiển thị.
-                </p>
-                <div className="roster-add-col-actions">
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    onClick={() => {
-                      setRenameColumn(null)
-                      setNewColumnLabel('')
-                    }}
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn--primary"
-                    disabled={!newColumnLabel.trim() || newColumnLabel.trim() === renameColumn.label}
-                  >
-                    Lưu
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {addColumnOpen ? (
-        <div
-          className="modal-backdrop"
-          role="presentation"
-          onClick={() => setAddColumnOpen(false)}
-        >
-          <div
-            className="modal"
-            role="dialog"
-            aria-labelledby="roster-add-col-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="modal-head">
-              <h2 id="roster-add-col-title">Thêm cột</h2>
-              <button
-                type="button"
-                className="btn btn--icon"
-                aria-label="Đóng"
-                onClick={() => setAddColumnOpen(false)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <form
-                className="roster-add-col-form"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  void handleAddColumn()
-                }}
-              >
-                <label>
-                  Tên cột
-                  <input
-                    className="input"
-                    autoFocus
-                    placeholder="VD: Discord, WhatsApp, MEXC UID…"
-                    value={newColumnLabel}
-                    onChange={(event) => setNewColumnLabel(event.target.value)}
-                  />
-                </label>
-                <div className="roster-add-col-actions">
-                  <button
-                    type="button"
-                    className="btn btn--ghost"
-                    onClick={() => setAddColumnOpen(false)}
-                  >
-                    Hủy
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn--primary"
-                    disabled={!newColumnLabel.trim()}
-                  >
-                    Thêm
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        </div>
+          onClose={closeColumnModal}
+        />
       ) : null}
     </div>
   )
