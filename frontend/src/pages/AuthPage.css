@@ -1,0 +1,106 @@
+/* Auth page shell — intro banner only; wizard styles in AccountAuthWizard.css */
+
+.main-wrap:has(.page--auth) {
+  min-height: 100vh;
+}
+
+.main:has(.page--auth) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.page--auth {
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 7%, var(--bg-elevated)),
+    var(--bg-elevated)
+  );
+}
+
+.auth-intro-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.auth-intro-text {
+  flex: 1;
+  min-width: 200px;
+}
+
+.auth-kicker {
+  display: block;
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.auth-intro-text h1 {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.auth-intro-text .page-desc {
+  margin: 0;
+  max-width: 56ch;
+}
+
+.auth-intro-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.auth-intro-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .auth-intro {
+    padding: 16px;
+  }
+
+  .auth-intro-icon {
+    width: 42px;
+    height: 42px;
+  }
+}

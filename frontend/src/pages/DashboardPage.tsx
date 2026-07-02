@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import './DashboardPage.css'
 import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
@@ -57,9 +58,9 @@ const apiMap = [
   {
     group: 'Auth',
     items: [
-      { method: 'POST', path: '/api/auth/send-code', page: '/auth' },
-      { method: 'POST', path: '/api/auth/login', page: '/auth' },
-      { method: 'POST', path: '/api/auth/register', page: '/auth' },
+      { method: 'POST', path: '/api/auth/send-code', page: '/sessions?add=1' },
+      { method: 'POST', path: '/api/auth/login', page: '/sessions?add=1' },
+      { method: 'POST', path: '/api/auth/register', page: '/sessions?add=1' },
       { method: 'GET', path: '/api/auth/login-code/{phone}', page: null },
       { method: 'PUT', path: '/api/auth/2fa', page: '/security' },
       { method: 'PUT', path: '/api/auth/privacy', page: '/security' },
@@ -144,8 +145,8 @@ const quickLinks = [
     ),
   },
   {
-    to: '/auth',
-    label: 'Tài khoản',
+    to: '/sessions?add=1',
+    label: 'Thêm tài khoản',
     desc: 'OTP, 2FA, đăng ký session',
     accent: 'rose',
     icon: (

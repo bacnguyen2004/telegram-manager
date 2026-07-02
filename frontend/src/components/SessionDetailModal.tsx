@@ -453,7 +453,7 @@ export function SessionDetailModal({
               {meData?.status === 'unauthorized' ? (
                 <div className="sd-alert sd-alert--warn">
                   <p>Session tool chưa đăng nhập hoặc hết hạn.</p>
-                  <Link to="/auth" className="btn btn--primary btn--sm">
+                  <Link to="/sessions?add=1" className="btn btn--primary btn--sm">
                     Đăng nhập lại
                   </Link>
                 </div>

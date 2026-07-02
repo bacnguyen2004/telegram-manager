@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import './AuditPage.css'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
@@ -9,6 +10,7 @@ import type { AuditLogItem, MetadataOverviewData } from '../types/api'
 import {
   AUDIT_CATEGORY_OPTIONS,
   AUDIT_STATUS_OPTIONS,
+  auditActionCategory,
   auditActionLabel,
   auditActionToneClass,
   auditStatusClass,
@@ -20,6 +22,13 @@ import {
 import { formatDate, formatRelativeDate } from '../utils/format'
 
 const PAGE_SIZE = 20
+
+const CATEGORY_SHORT: Record<AuditCategory, string> = {
+  all: 'Tất cả',
+  auth: 'Auth',
+  sessions: 'Session',
+  groups: 'Nhóm',
+}
 
 function categoryFromParam(value: string | null): AuditCategory {
   const match = AUDIT_CATEGORY_OPTIONS.find((item) => item.id === value)
@@ -168,85 +177,100 @@ export function AuditPage() {
 
   return (
     <div className="page page--audit">
-      <header className="page-header">
+      <header className="page-header audit-page-header">
         <div>
-          <span className="audit-page-kicker">PostgreSQL metadata</span>
           <h1>Nhật ký hoạt động</h1>
           <p className="page-desc">
-            Login, join/leave group, quét nhóm — lưu trong <code>audit_logs</code>. Xem chi tiết
-            từng acc ở <Link to="/sessions">Sessions</Link>.
+            Login, session, join/leave và quét nhóm — ghi vào <code>audit_logs</code> khi PostgreSQL
+            bật.
           </p>
         </div>
-        <button type="button" className="btn btn--ghost" onClick={() => void loadAudit()}>
-          Làm mới
-        </button>
+        <div className="audit-page-actions">
+          <Link to="/sessions" className="btn btn--ghost btn--sm">
+            Sessions
+          </Link>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => {
+              void loadOverview()
+              void loadAudit()
+            }}
+            disabled={loading}
+          >
+            {loading ? 'Đang tải…' : 'Làm mới'}
+          </button>
+        </div>
       </header>
 
       <Alert type="error" message={error} />
 
       <section className="stats-grid audit-stats">
-        <article className="stat-card">
-          <p className="stat-label">Session đã lưu</p>
+        <article className="stat-card audit-stat-card">
+          <p className="stat-label">Session DB</p>
           <p className="stat-value">{stats.sessions}</p>
+          <p className="audit-stat-foot">Metadata</p>
         </article>
-        <article className="stat-card">
+        <article className="stat-card audit-stat-card audit-stat-card--accent">
           <p className="stat-label">Tổng audit</p>
           <p className="stat-value">{stats.audits}</p>
+          <p className="audit-stat-foot">Mọi hành động</p>
         </article>
-        <article className="stat-card">
-          <p className="stat-label">Lần quét nhóm</p>
+        <article className="stat-card audit-stat-card audit-stat-card--success">
+          <p className="stat-label">Quét nhóm</p>
           <p className="stat-value">{stats.scans}</p>
+          <p className="audit-stat-foot">Group scan</p>
         </article>
-        <article className="stat-card stat-card--active">
+        <article className="stat-card audit-stat-card">
           <p className="stat-label">Kết quả lọc</p>
-          <p className="stat-value">{total}</p>
+          <p className="stat-value">{loading ? '—' : total}</p>
+          <p className="audit-stat-foot">{hasActiveFilters ? 'Đang lọc' : 'Hiện tại'}</p>
         </article>
       </section>
 
       {showRecent ? (
-        <section className="panel audit-recent-panel">
-          <div className="audit-recent-head">
-            <h2>Hoạt động gần đây</h2>
-            <p className="panel-meta">{recentAudit.length} bản ghi mới nhất</p>
+        <section className="panel audit-recent-strip">
+          <div className="audit-recent-strip-head">
+            <span className="audit-recent-strip-title">Gần đây</span>
+            <span className="audit-recent-strip-meta muted">{recentAudit.length} mục</span>
           </div>
-          <ul className="audit-recent-list">
+          <div className="audit-recent-strip-scroll">
             {recentAudit.map((row) => (
-              <li key={row.id} className="audit-recent-item">
-                <span className={`audit-recent-dot ${auditActionToneClass(row.action)}`} />
-                <div className="audit-recent-body">
-                  <span className={`audit-action ${auditActionToneClass(row.action)}`}>
-                    {auditActionLabel(row.action)}
-                  </span>
-                  <span className="audit-recent-meta muted">
-                    <Link to={`/audit?phone=${encodeURIComponent(row.phone)}`} className="mono">
-                      {row.phone}
-                    </Link>
-                    {' · '}
-                    <time dateTime={row.created_at} title={formatDate(row.created_at)}>
-                      {formatRelativeDate(row.created_at)}
-                    </time>
-                  </span>
-                </div>
-                <span className={`audit-status ${auditStatusClass(row.status)}`}>
-                  {auditStatusLabel(row.status)}
+              <button
+                key={row.id}
+                type="button"
+                className={`audit-recent-chip audit-recent-chip--${auditActionCategory(row.action)}`}
+                onClick={() => {
+                  setPhoneFilter(row.phone)
+                  setOffset(0)
+                }}
+                title={formatDate(row.created_at)}
+              >
+                <span className="audit-recent-chip-action">{auditActionLabel(row.action)}</span>
+                <span className="audit-recent-chip-meta">
+                  {row.phone} · {formatRelativeDate(row.created_at)}
                 </span>
-              </li>
+              </button>
             ))}
-          </ul>
+          </div>
         </section>
       ) : null}
 
       <section className="panel audit-panel">
-        <div className="panel-head audit-panel-head">
+        <div className="audit-panel-head">
           <div>
-            <h2>Audit log</h2>
+            <h2>Danh sách hoạt động</h2>
             <p className="panel-meta">
               {hasActiveFilters
                 ? `${total} bản ghi khớp bộ lọc`
-                : 'Tất cả hành động được ghi tự động'}
+                : `${total} bản ghi — mới nhất trước`}
             </p>
           </div>
-          <div className="audit-filters">
+          {!loading && total > 0 ? <span className="audit-count-badge">{total}</span> : null}
+        </div>
+
+        <div className="audit-toolbar">
+          <div className="audit-toolbar-account">
             <PhoneSelect
               value={phoneFilter}
               onChange={(value) => {
@@ -255,116 +279,129 @@ export function AuditPage() {
               }}
               allowManual
               required={false}
-              label="Lọc theo acc"
+              label="Tài khoản"
               sessions={accounts.sessions}
               metaByPhone={accounts.metaByPhone}
               loading={accounts.loading}
             />
+          </div>
+
+          <div className="audit-toolbar-filters">
+            <div className="audit-filter-group">
+              <span className="audit-filter-label">Loại</span>
+              <div className="audit-filter-pills" role="group" aria-label="Loại hành động">
+                {AUDIT_CATEGORY_OPTIONS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`audit-filter-pill audit-filter-pill--${item.id}${categoryFilter === item.id ? ' audit-filter-pill--active' : ''}`}
+                    onClick={() => setCategory(item.id)}
+                  >
+                    {CATEGORY_SHORT[item.id]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="audit-filter-group">
+              <span className="audit-filter-label">Trạng thái</span>
+              <div className="audit-filter-pills" role="group" aria-label="Trạng thái">
+                {AUDIT_STATUS_OPTIONS.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`audit-filter-pill${statusFilter === item.id ? ' audit-filter-pill--active' : ''}`}
+                    onClick={() => setStatus(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             {hasActiveFilters ? (
-              <button type="button" className="btn btn--sm btn--ghost" onClick={resetFilters}>
+              <button type="button" className="btn btn--ghost btn--sm audit-clear-btn" onClick={resetFilters}>
                 Xóa lọc
               </button>
             ) : null}
           </div>
         </div>
 
-        <div className="audit-toolbar">
-          <div className="audit-filter-row">
-            <span className="audit-filter-label">Loại</span>
-            <div className="audit-filter-pills">
-              {AUDIT_CATEGORY_OPTIONS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`audit-filter-pill${categoryFilter === item.id ? ' audit-filter-pill--active' : ''}`}
-                  onClick={() => setCategory(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="audit-filter-row">
-            <span className="audit-filter-label">Trạng thái</span>
-            <div className="audit-filter-pills">
-              {AUDIT_STATUS_OPTIONS.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`audit-filter-pill${statusFilter === item.id ? ' audit-filter-pill--active' : ''}`}
-                  onClick={() => setStatus(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
         {loading ? (
-          <div className="empty-state">Đang tải…</div>
+          <div className="audit-state">Đang tải…</div>
         ) : items.length === 0 ? (
-          <div className="empty-state">
+          <div className="audit-state audit-state--empty">
             <p>{hasActiveFilters ? 'Không có bản ghi khớp bộ lọc.' : 'Chưa có bản ghi audit.'}</p>
             <p className="muted">
               {hasActiveFilters
                 ? 'Thử bỏ bớt bộ lọc hoặc chọn acc khác.'
-                : 'Đăng nhập acc, quét nhóm hoặc join/leave — hành động sẽ được ghi tự động khi DB bật.'}
+                : 'Thao tác trên acc sẽ được ghi khi PostgreSQL bật.'}
             </p>
             {hasActiveFilters ? (
-              <button type="button" className="btn btn--sm btn--ghost" onClick={resetFilters}>
+              <button type="button" className="btn btn--ghost btn--sm" onClick={resetFilters}>
                 Xóa tất cả lọc
               </button>
-            ) : null}
+            ) : (
+              <Link to="/sessions?add=1" className="btn btn--primary btn--sm">
+                Thêm tài khoản
+              </Link>
+            )}
           </div>
         ) : (
           <>
-            <div className="table-wrap">
-              <table className="data-table data-table--audit">
+            <div className="table-wrap audit-table-wrap">
+              <table className="data-table audit-table">
                 <thead>
                   <tr>
                     <th>Thời gian</th>
-                    <th>Acc</th>
+                    <th>Tài khoản</th>
                     <th>Hành động</th>
                     <th>Trạng thái</th>
                     <th>Chi tiết</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((row) => (
-                    <tr key={row.id}>
-                      <td className="audit-cell-time">
-                        <time dateTime={row.created_at} title={formatDate(row.created_at)}>
-                          {formatRelativeDate(row.created_at)}
-                        </time>
-                        <span className="audit-cell-time-full muted">{formatDate(row.created_at)}</span>
-                      </td>
-                      <td>
-                        <Link to={`/audit?phone=${encodeURIComponent(row.phone)}`} className="mono">
-                          {row.phone}
-                        </Link>
-                      </td>
-                      <td>
-                        <span
-                          className={`audit-action ${auditActionToneClass(row.action)}`}
-                          title={row.action}
-                        >
-                          {auditActionLabel(row.action)}
-                        </span>
-                        {row.resource && row.resource !== row.phone ? (
-                          <span className="audit-resource muted">{row.resource}</span>
-                        ) : null}
-                      </td>
-                      <td>
-                        <span className={`audit-status ${auditStatusClass(row.status)}`}>
-                          {auditStatusLabel(row.status)}
-                        </span>
-                      </td>
-                      <td className="audit-cell-detail">
-                        <AuditDetailCell detail={row.detail} />
-                      </td>
-                    </tr>
-                  ))}
+                  {items.map((row) => {
+                    const category = auditActionCategory(row.action)
+                    const statusKey = auditStatusClass(row.status).replace('audit-status--', '')
+                    return (
+                      <tr
+                        key={row.id}
+                        className={`audit-row audit-row--${category} audit-row--status-${statusKey}`}
+                      >
+                        <td className="audit-cell-time">
+                          <time dateTime={row.created_at} title={formatDate(row.created_at)}>
+                            {formatRelativeDate(row.created_at)}
+                          </time>
+                        </td>
+                        <td>
+                          <Link
+                            to={`/audit?phone=${encodeURIComponent(row.phone)}`}
+                            className="phone audit-phone-link"
+                          >
+                            {row.phone}
+                          </Link>
+                        </td>
+                        <td className="audit-cell-action">
+                          <span
+                            className={`audit-action-tag ${auditActionToneClass(row.action)}`}
+                            title={row.action}
+                          >
+                            {auditActionLabel(row.action)}
+                          </span>
+                          {row.resource && row.resource !== row.phone ? (
+                            <span className="audit-resource muted">{row.resource}</span>
+                          ) : null}
+                        </td>
+                        <td>
+                          <span className={`audit-status ${auditStatusClass(row.status)}`}>
+                            {auditStatusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td className="audit-cell-detail">
+                          <AuditDetailCell detail={row.detail} />
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

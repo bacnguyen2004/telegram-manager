@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import './GroupsPage.css'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'

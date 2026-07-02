@@ -109,13 +109,15 @@
 
   .main-wrap:has(.page--dialogs-active),
   .main-wrap:has(.page--groups-active),
-  .main-wrap:has(.page--security-active) {
+  .main-wrap:has(.page--security-active),
+  .main-wrap:has(.page--tasks-active) {
     height: 100vh;
   }
 
   .main:has(.page--dialogs-active),
   .main:has(.page--groups-active),
-  .main:has(.page--security-active) {
+  .main:has(.page--security-active),
+  .main:has(.page--tasks-active) {
     padding: 12px 16px;
   }
 
@@ -183,14 +185,21 @@
 
   .security-workspace {
     grid-template-columns: 1fr;
-    min-height: auto;
+    grid-template-rows: minmax(280px, 34vh) minmax(0, 1fr);
   }
 
   .security-session-panel {
-    min-height: auto;
+    height: 100%;
+    min-height: 0;
   }
 
-  .security-privacy-options {
+  .security-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .security-privacy-options,
+  .privacy-rule-grid {
     grid-template-columns: 1fr;
   }
 
@@ -231,12 +240,54 @@
     display: none;
   }
 
-  .tasks-layout {
+  .tasks-hero {
     grid-template-columns: 1fr;
   }
 
-  .tasks-steps {
+  .tasks-hero-metrics {
+    justify-content: flex-start;
+  }
+
+  .tasks-hero-reload {
+    justify-self: start;
+  }
+
+  .tasks-workspace-row {
     grid-template-columns: 1fr;
+    grid-template-rows: minmax(240px, 30vh) minmax(0, 1fr);
+  }
+
+  .page--tasks-active .tasks-workspace-row > .acc-picker-panel,
+  .page--tasks-active .tasks-workspace-row > .tasks-workflow-panel {
+    grid-column: 1;
+  }
+
+  .page--tasks-active .tasks-workspace-row > .tasks-workflow-panel {
+    grid-row: 2;
+  }
+
+  .page--tasks-active .tasks-workspace-row > .acc-picker-panel {
+    grid-row: 1;
+  }
+
+  .tasks-sidebar,
+  .tasks-accounts-panel {
+    max-height: none;
+    height: 100%;
+  }
+
+  .tasks-config,
+  .tasks-workflow-panel {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .tasks-stepper {
+    flex-wrap: wrap;
+  }
+
+  .tasks-stepper-line {
+    display: none;
   }
 
   .tasks-action-grid {
@@ -248,9 +299,12 @@
     grid-template-columns: 1fr;
   }
 
-  .tasks-accounts-panel,
-  .tasks-workflow-panel {
-    min-height: auto;
+  .tasks-progress-panel:not(.tasks-progress-panel--idle) {
+    max-height: clamp(160px, 20vh, 240px);
+  }
+
+  .tasks-account-filters {
+    grid-template-columns: 1fr;
   }
 
   .audit-panel-head {

@@ -1,0 +1,980 @@
+﻿/* Security page — full-height shell */
+.main-wrap:has(.page--security-active) {
+  height: 100vh;
+  overflow: hidden;
+}
+
+.main:has(.page--security-active) {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  overflow-x: hidden;
+  padding: 10px 16px;
+}
+
+.page--security-active {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  gap: 8px;
+}
+
+.page--security {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.page--security-active .page-header,
+.page--security .page-header {
+  flex-shrink: 0;
+  margin-bottom: 0;
+  gap: 12px;
+}
+
+.security-page-kicker {
+  display: block;
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--success);
+}
+
+.security-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.security-page-header h1 {
+  margin: 0 0 2px;
+  font-size: 1.35rem;
+  line-height: 1.2;
+}
+
+.security-page-header .page-desc {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
+  max-width: 42ch;
+}
+
+.security-page-header .page-desc a {
+  color: var(--success);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.security-page-header .page-desc a:hover {
+  text-decoration: underline;
+}
+
+.security-header-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.security-workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.security-session-panel {
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
+}
+
+.security-panel-head,
+.security-card-head {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.security-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.security-panel-head h2,
+.security-card-head h2 {
+  margin: 0 0 4px;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.security-control-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+
+.security-main {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  align-self: stretch;
+}
+
+.security-actions-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1.62fr) auto minmax(0, 0.93fr);
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+
+.security-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.security-block--2fa {
+  border-left: 3px solid #7c3aed;
+}
+
+.security-block--privacy {
+  border-left: 3px solid #2481cc;
+}
+
+.security-blocks-divider {
+  height: 0;
+  margin: 0;
+  border: none;
+  border-top: 2px solid var(--border);
+  background: color-mix(in srgb, var(--border) 70%, var(--bg-muted));
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--bg-elevated) 80%, transparent);
+}
+
+.security-card {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.security-main .security-card-head--split {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  flex-shrink: 0;
+}
+
+.security-main .security-card-head--2fa,
+.security-card--2fa .security-card-head {
+  background: color-mix(in srgb, #7c3aed 6%, var(--bg-elevated));
+}
+
+.security-main .security-card-head--privacy,
+.security-card--privacy .security-card-head {
+  background: color-mix(in srgb, #2481cc 6%, var(--bg-elevated));
+}
+
+.security-card-head-main {
+  min-width: 0;
+}
+
+.security-card-head-aside {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.security-main .security-card-head h2 {
+  margin: 0 0 2px;
+  font-size: 15px;
+}
+
+.security-main .security-card-head .panel-meta {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.security-block .security-card-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.security-block .security-card-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 10px;
+}
+
+.security-block--2fa .security-card-scroll {
+  overflow-y: hidden;
+  gap: 8px;
+  padding: 10px 14px 8px;
+}
+
+.security-block--privacy .security-card-scroll {
+  justify-content: flex-start;
+  overflow-y: hidden;
+  gap: 8px;
+  padding: 8px 14px 6px;
+}
+
+.security-main .security-form,
+.security-main .privacy-form {
+  gap: 10px;
+}
+
+.security-main .security-form--2fa {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.security-block--2fa .security-card-foot {
+  padding: 8px 14px 10px;
+}
+
+.security-2fa-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(124, 58, 237, 0.16);
+  background: color-mix(in srgb, #7c3aed 5%, var(--bg-elevated));
+  flex-shrink: 0;
+}
+
+.security-2fa-guide--row {
+  margin-top: 4px;
+}
+
+.security-guide-kicker {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #7c3aed;
+}
+
+.security-guide-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.security-guide-steps--row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.security-guide-steps li {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.security-guide-steps--row li {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto 1fr;
+  justify-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid rgba(124, 58, 237, 0.1);
+}
+
+.security-guide-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.12);
+  color: #7c3aed;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.security-guide-step-text {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-strong);
+}
+
+.security-guide-steps--row .security-guide-step-text {
+  font-size: 11px;
+}
+
+.security-action-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.security-action-context--2fa {
+  border-color: rgba(124, 58, 237, 0.16);
+  background: color-mix(in srgb, #7c3aed 4%, var(--bg-elevated));
+}
+
+.security-action-context--privacy {
+  border-color: rgba(36, 129, 204, 0.16);
+  background: color-mix(in srgb, #2481cc 4%, var(--bg-elevated));
+}
+
+.security-action-context--privacy .security-action-context-label {
+  color: #2481cc;
+}
+
+.security-action-context-label {
+  color: #7c3aed;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.security-action-context-value {
+  min-width: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-main .field {
+  gap: 4px;
+  margin-bottom: 0;
+}
+
+.security-main .field span {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.security-main .field input,
+.security-main .password-input-wrap input {
+  padding: 8px 10px;
+  font-size: 13px;
+  min-height: 36px;
+}
+
+.security-main .password-input-toggle {
+  width: 34px;
+  height: 34px;
+}
+
+.security-main .security-card-foot {
+  padding: 10px 14px 12px;
+  flex-shrink: 0;
+}
+
+.security-main .security-2fa-mode-btn,
+.security-main .security-privacy-mode-btn {
+  padding: 6px 11px;
+  font-size: 12px;
+}
+
+.security-main .security-card-badge {
+  padding: 4px 9px;
+  font-size: 10px;
+}
+
+/* Privacy card content */
+.privacy-form {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 auto;
+  min-height: auto;
+  justify-content: flex-start;
+}
+
+.security-main .privacy-rule-grid {
+  flex: 0 0 auto;
+  min-height: auto;
+}
+
+.security-block--privacy .security-card-head--split {
+  padding: 8px 14px;
+}
+
+.security-block--privacy .security-card-foot {
+  padding: 8px 14px 10px;
+}
+
+.security-block--privacy .privacy-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.privacy-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.security-privacy-pick-label {
+  margin: 0 0 6px;
+}
+
+.security-block--privacy .privacy-rule-card {
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.privacy-rule-card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--text-strong);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.privacy-rule-card:hover:not(:disabled) {
+  border-color: rgba(36, 129, 204, 0.35);
+  background: color-mix(in srgb, #2481cc 4%, var(--bg-elevated));
+}
+
+.privacy-rule-card:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.privacy-rule-card--active {
+  border-color: rgba(36, 129, 204, 0.5);
+  background: rgba(36, 129, 204, 0.08);
+  box-shadow: 0 0 0 1px rgba(36, 129, 204, 0.14);
+}
+
+.privacy-rule-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: rgba(36, 129, 204, 0.1);
+  color: #2481cc;
+  flex-shrink: 0;
+}
+
+.privacy-rule-card--active .privacy-rule-card-icon {
+  background: #2481cc;
+  color: #fff;
+}
+
+.privacy-rule-card-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.privacy-rule-card-label {
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.privacy-rule-card-desc {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.security-block--privacy .privacy-form {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.security-card--privacy .security-bulk-progress {
+  flex-shrink: 0;
+  margin-top: 0;
+}
+
+.security-actions-panel .security-bulk-progress .table-wrap {
+  display: none;
+}
+
+.security-main .security-bulk-progress {
+  padding-top: 10px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.security-card-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(124, 58, 237, 0.1);
+  color: #7c3aed;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.security-card-badge--privacy {
+  background: rgba(36, 129, 204, 0.1);
+  color: #2481cc;
+}
+
+.security-card-body {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.security-card-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 20px 12px;
+}
+
+.security-card-foot {
+  flex-shrink: 0;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+
+.security-card-foot .security-form-actions {
+  margin: 0;
+  justify-content: flex-end;
+}
+
+.security-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.security-form .field {
+  margin: 0;
+}
+
+.security-privacy-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.security-privacy-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  color: var(--text-strong);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+}
+
+.security-privacy-option:hover:not(:disabled) {
+  border-color: rgba(36, 129, 204, 0.35);
+}
+
+.security-privacy-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.security-privacy-option--active {
+  border-color: rgba(36, 129, 204, 0.45);
+  background: rgba(36, 129, 204, 0.06);
+  box-shadow: 0 0 0 1px rgba(36, 129, 204, 0.12);
+}
+
+.security-privacy-option-label {
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.security-privacy-option-desc {
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.security-submit-btn {
+  align-self: flex-start;
+  min-width: 180px;
+}
+
+.security-card-foot .security-submit-btn {
+  align-self: auto;
+}
+
+.security-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+/* 2FA mode tabs */
+.security-2fa-mode {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  width: fit-content;
+}
+
+.security-2fa-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.security-2fa-mode-btn:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: var(--bg-hover);
+}
+
+.security-2fa-mode-btn--active {
+  background: var(--bg-elevated);
+  color: #7c3aed;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.security-2fa-mode-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.security-2fa-mode-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #7c3aed 14%, var(--bg));
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* Privacy mode tabs */
+.security-privacy-mode {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  width: fit-content;
+}
+
+.security-privacy-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.security-privacy-mode-btn:hover:not(:disabled) {
+  color: var(--text-strong);
+  background: var(--bg-hover);
+}
+
+.security-privacy-mode-btn--active {
+  background: var(--bg-elevated);
+  color: #2481cc;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.security-privacy-mode-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.security-privacy-mode-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(36, 129, 204, 0.12);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* Bulk progress */
+.security-bulk-progress {
+  margin-top: 4px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.security-bulk-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.security-bulk-progress-pct {
+  font-variant-numeric: tabular-nums;
+}
+
+.security-bulk-progress--2fa .security-bulk-progress-pct {
+  color: #7c3aed;
+}
+
+.security-bulk-progress--privacy .security-bulk-progress-pct {
+  color: #2481cc;
+}
+
+.security-bulk-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.security-bulk-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.2s ease;
+}
+
+.security-bulk-progress--2fa .security-bulk-progress-fill {
+  background: linear-gradient(90deg, #7c3aed, color-mix(in srgb, #7c3aed 60%, var(--accent)));
+}
+
+.security-bulk-progress--privacy .security-bulk-progress-fill {
+  background: linear-gradient(90deg, #2481cc, color-mix(in srgb, #2481cc 60%, var(--accent)));
+}
+
+.security-bulk-progress .table-wrap {
+  max-height: min(280px, 36vh);
+  overflow-y: auto;
+}
+
+.security-bulk-progress-table th,
+.security-bulk-progress-table td {
+  font-size: 12px;
+  padding: 10px 12px;
+}
+
+.security-bulk-progress-row--success {
+  background: color-mix(in srgb, var(--success) 5%, transparent);
+}
+
+.security-bulk-progress-row--error {
+  background: color-mix(in srgb, var(--danger) 5%, transparent);
+}
+
+.security-bulk-status {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.security-bulk-status--success {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+}
+
+.security-bulk-status--error {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+}
+
+.security-bulk-status--running {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.security-bulk-status--pending,
+.security-bulk-status--skipped {
+  color: var(--text-muted);
+  background: var(--bg-hover);
+}
+
+.security-bulk-message {
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+@media (max-width: 900px) {
+  .security-guide-steps--row {
+    grid-template-columns: 1fr;
+  }
+
+  .security-guide-steps--row li {
+    grid-template-columns: 24px 1fr;
+    grid-template-rows: auto;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .security-actions-panel {
+    grid-template-rows: minmax(0, 1.58fr) auto minmax(0, 0.95fr);
+  }
+
+  .security-block--2fa .security-card-scroll {
+    overflow-y: auto;
+  }
+
+  .main:has(.page--security-active) {
+    padding: 12px 16px;
+  }
+
+  .security-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(280px, 34vh) minmax(0, 1fr);
+  }
+
+  .security-session-panel {
+    max-height: none;
+  }
+
+  .security-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .security-main .security-card-head--split {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .security-card-head-aside {
+    justify-content: space-between;
+  }
+
+  .security-action-context {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .security-action-context-value {
+    text-align: left;
+    white-space: normal;
+  }
+
+  .security-block--privacy .privacy-rule-grid {
+    grid-template-columns: 1fr;
+  }
+
+}
+

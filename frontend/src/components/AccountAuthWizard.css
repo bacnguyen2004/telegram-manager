@@ -1,0 +1,234 @@
+/* Account auth wizard — OTP / 2FA / register flow */
+
+.auth-wizard--page .auth-flow {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 0 20px;
+  min-height: 0;
+}
+
+.auth-wizard--embedded .auth-flow {
+  display: block;
+  padding: 0;
+}
+
+.auth-wizard--embedded .auth-shell {
+  max-width: none;
+}
+
+.auth-shell {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.auth-stepper {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.auth-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.auth-step-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  background: var(--bg-hover);
+}
+
+.auth-step-label {
+  line-height: 1.25;
+}
+
+.auth-step--active {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.auth-step--active .auth-step-num {
+  background: var(--accent);
+  color: #fff;
+}
+
+.auth-step--done {
+  border-color: rgba(22, 163, 74, 0.28);
+  color: var(--success);
+}
+
+.auth-step--done .auth-step-num {
+  background: rgba(22, 163, 74, 0.14);
+  color: var(--success);
+}
+
+.auth-step--skipped {
+  border-style: dashed;
+  opacity: 0.82;
+}
+
+.auth-step--skipped .auth-step-num {
+  font-size: 13px;
+}
+
+.auth-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth-form-panel {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+}
+
+.auth-card-inner {
+  padding: 24px 22px 22px;
+}
+
+.auth-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.auth-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.auth-card-head h2 {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-strong);
+}
+
+.auth-card-head .form-meta {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.auth-form-panel .field {
+  margin-bottom: 14px;
+}
+
+.phone-dial-field {
+  margin-bottom: 14px;
+}
+
+.phone-dial-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.auth-form-panel .field span {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.auth-form-panel .field input {
+  margin-top: 6px;
+  padding: 12px 14px;
+  font-size: 15px;
+  border-radius: 11px;
+}
+
+.auth-form-panel .btn--block {
+  margin-top: 6px;
+  padding: 12px 16px;
+  font-size: 15px;
+  border-radius: 11px;
+}
+
+.auth-form-panel .form-actions {
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.auth-done-panel {
+  padding: 8px 4px 4px;
+  text-align: center;
+}
+
+.auth-done-panel .done-icon {
+  width: 64px;
+  height: 64px;
+  font-size: 30px;
+  margin-bottom: 14px;
+  border: 2px solid rgba(22, 163, 74, 0.25);
+}
+
+.auth-done-panel h2 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.auth-done-details {
+  margin: 0 0 18px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  text-align: left;
+}
+
+.auth-done-details .detail-row + .detail-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border);
+}
+
+@media (max-width: 640px) {
+  .auth-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .auth-card-inner {
+    padding: 20px 16px 18px;
+  }
+}

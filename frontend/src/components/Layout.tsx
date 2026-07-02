@@ -18,10 +18,7 @@ const navSections = [
   },
   {
     label: 'Xác thực',
-    items: [
-      { to: '/auth', label: 'Tài khoản', end: false },
-      { to: '/security', label: 'Bảo mật', end: false },
-    ],
+    items: [{ to: '/security', label: 'Bảo mật', end: false }],
   },
   {
     label: 'Hệ thống',
@@ -43,7 +40,7 @@ function pageTitle(pathname: string): string {
     '/conversation': 'Hội thoại',
     '/audit': 'Audit log',
     '/health': 'Health',
-    '/auth': 'Tài khoản',
+    '/auth': 'Thêm tài khoản',
     '/security': 'Bảo mật',
   }
   if (map[pathname]) return map[pathname]

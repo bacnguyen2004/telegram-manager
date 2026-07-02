@@ -1,0 +1,59 @@
+.phone-dial-input {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.95fr) minmax(0, 1.35fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.phone-dial-prefix,
+.phone-dial-number {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.phone-dial-prefix-label,
+.phone-dial-number-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.phone-dial-select,
+.phone-dial-local {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  font-size: 15px;
+  border-radius: 11px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-strong);
+}
+
+.phone-dial-select {
+  padding-right: 10px;
+  cursor: pointer;
+}
+
+.phone-dial-select:focus,
+.phone-dial-local:focus {
+  outline: none;
+  border-color: var(--accent-border);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.phone-dial-select:disabled,
+.phone-dial-local:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+@media (max-width: 520px) {
+  .phone-dial-input {
+    grid-template-columns: 1fr;
+  }
+}

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './SessionsPage.css'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
+import { AddAccountModal } from '../components/AddAccountModal'
 import { Alert } from '../components/Alert'
 import { ConfirmModal } from '../components/ConfirmModal'
 import { Pagination } from '../components/Pagination'
@@ -299,6 +300,9 @@ export function SessionsPage() {
   const [checkLogVisible, setCheckLogVisible] = useState(false)
   const [lastCheckAt, setLastCheckAt] = useState<string | null>(null)
   const [checkTotal, setCheckTotal] = useState(0)
+  const [showAddAccount, setShowAddAccount] = useState(
+    () => searchParams.get('add') === '1',
+  )
   const checkAbortRef = useRef(false)
   const checkRequestRef = useRef<AbortController | null>(null)
   const urlPhoneDismissedRef = useRef(false)
@@ -358,6 +362,31 @@ export function SessionsPage() {
     const timer = window.setTimeout(() => setSuccess(''), 4000)
     return () => window.clearTimeout(timer)
   }, [success])
+
+  useEffect(() => {
+    const shouldOpen = searchParams.get('add') === '1'
+    setShowAddAccount(shouldOpen)
+  }, [searchParams])
+
+  function openAddAccount() {
+    setShowAddAccount(true)
+    const next = new URLSearchParams(searchParams)
+    next.set('add', '1')
+    setSearchParams(next, { replace: true })
+  }
+
+  function closeAddAccount() {
+    setShowAddAccount(false)
+    const next = new URLSearchParams(searchParams)
+    next.delete('add')
+    setSearchParams(next, { replace: true })
+  }
+
+  function handleAccountAdded(phone: string) {
+    void loadSessions()
+    void loadMetadata()
+    setSuccess(`Đã thêm session ${phone}`)
+  }
 
   function handleStopCheck() {
     checkAbortRef.current = true
@@ -720,6 +749,14 @@ export function SessionsPage() {
           <button
             type="button"
             className="btn btn--ghost"
+            onClick={openAddAccount}
+            disabled={checking || showAddAccount}
+          >
+            Thêm tài khoản
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
             onClick={() => {
               void loadSessions()
               void loadMetadata()
@@ -979,11 +1016,14 @@ export function SessionsPage() {
         {loading ? (
           <div className="empty-state">Đang tải…</div>
         ) : sessions.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state sessions-empty-add">
             <p>Chưa có session nào.</p>
-            <p>
-              Vào <strong>Đăng nhập</strong> để tạo file <code>.session</code>.
-            </p>
+            <p>Thêm tài khoản Telegram để tạo file <code>.session</code> đầu tiên.</p>
+            {!showAddAccount ? (
+              <button type="button" className="btn btn--primary" onClick={openAddAccount}>
+                Thêm tài khoản
+              </button>
+            ) : null}
           </div>
         ) : filteredSessions.length === 0 ? (
           <div className="empty-state sessions-empty-filter">
@@ -1114,6 +1154,10 @@ export function SessionsPage() {
           />
         )}
       </section>
+
+      {showAddAccount ? (
+        <AddAccountModal onClose={closeAddAccount} onSuccess={handleAccountAdded} />
+      ) : null}
 
       {selectedPhone ? (
         <SessionDetailModal

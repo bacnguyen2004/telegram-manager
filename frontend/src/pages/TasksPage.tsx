@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import './TasksPage.css'
 import { api } from '../api/client'
+import { AccountPickerPanel, type AccountPickerFilterState } from '../components/AccountPickerPanel'
+import { resolveAccountStatus } from '../utils/accountPicker'
 import { Alert } from '../components/Alert'
-import { StatusBadge } from '../components/StatusBadge'
-import type { CheckSessionItem, PollInfoData, PollOptionItem } from '../types/api'
+import type { PollInfoData, PollOptionItem } from '../types/api'
 import { useSessionAccounts } from '../hooks/useSessionAccounts'
+import {
+  CHAT_MEDIA_ACCEPT,
+  detectChatMediaKind,
+  validateChatMediaFile,
+} from '../utils/chatMedia'
 import { DEFAULT_QUICK_REACTIONS } from '../utils/reactions'
+
 import {
   actionsForGroup,
   getActionMeta,
@@ -81,11 +89,14 @@ function pollCancelWarnings(info: PollInfoData): string[] {
 }
 
 type TodoCancelMode = 'all' | 'pick'
-
 export function TasksPage() {
-  const { sessions, loading: sessionsLoading, reload, getPickerLabel } =
+  const { sessions, loading: sessionsLoading, reload, getPickerLabel, getMeta, metaByPhone } =
     useSessionAccounts()
-  const [checkResults, setCheckResults] = useState<CheckSessionItem[]>([])
+  const [accountFilterState, setAccountFilterState] = useState<AccountPickerFilterState>({
+    filteredCount: 0,
+    totalCount: 0,
+    hasFilters: false,
+  })
   const [selectedPhones, setSelectedPhones] = useState<Set<string>>(new Set())
   const [targetLink, setTargetLink] = useState('')
   const [actionGroup, setActionGroup] = useState<TaskActionGroup>('reactions')
@@ -103,7 +114,6 @@ export function TasksPage() {
   const [pipelineStepDelaySeconds, setPipelineStepDelaySeconds] = useState(3)
   const [showRunOptions, setShowRunOptions] = useState(false)
 
-  const [checking, setChecking] = useState(false)
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<TaskProgressRow[]>([])
   const [error, setError] = useState('')
@@ -123,18 +133,20 @@ export function TasksPage() {
   const parsedLink = useMemo(() => parseTelegramLink(targetLink), [targetLink])
   const actionMeta = useMemo(() => getActionMeta(action), [action])
 
-  const sessionRows = useMemo(() => {
-    const statusMap = new Map(checkResults.map((item) => [item.phone, item]))
-    return sessions.map((phone) => ({
-      phone,
-      check: statusMap.get(phone) ?? null,
-    }))
-  }, [sessions, checkResults])
+  const hasStatusData = metaByPhone.size > 0
 
   const activeCount = useMemo(
-    () => checkResults.filter((item) => item.status === 'active').length,
-    [checkResults],
+    () => sessions.filter((phone) => resolveAccountStatus(getMeta(phone)) === 'active').length,
+    [sessions, getMeta],
   )
+
+  const accountPickerMeta = useMemo(() => {
+    if (sessionsLoading || sessions.length === 0) return 'Chọn acc để chạy bulk'
+    if (accountFilterState.hasFilters) {
+      return `${accountFilterState.filteredCount}/${sessions.length} hiển thị`
+    }
+    return `${sessions.length} acc`
+  }, [sessionsLoading, sessions.length, accountFilterState])
 
   const groupActions = useMemo(() => actionsForGroup(actionGroup), [actionGroup])
 
@@ -285,30 +297,6 @@ export function TasksPage() {
     }
   }, [action])
 
-  function togglePhone(phone: string) {
-    setSelectedPhones((prev) => {
-      const next = new Set(prev)
-      if (next.has(phone)) next.delete(phone)
-      else next.add(phone)
-      return next
-    })
-  }
-
-  function selectAll() {
-    setSelectedPhones(new Set(sessions))
-  }
-
-  function selectActiveOnly() {
-    const active = new Set(
-      checkResults.filter((item) => item.status === 'active').map((item) => item.phone),
-    )
-    setSelectedPhones(active)
-  }
-
-  function clearSelection() {
-    setSelectedPhones(new Set())
-  }
-
   function selectCategory(group: TaskActionGroup) {
     const actions = actionsForGroup(group)
     setActionGroup(group)
@@ -328,28 +316,66 @@ export function TasksPage() {
     return !isActionAllowed(parsedLink, item)
   }
 
-  async function handleCheckSessions() {
-    setChecking(true)
-    setError('')
-    try {
-      const res = await api.checkSessions()
-      if (!res.success || !res.data) {
-        setError(res.error ?? 'Kiểm tra session thất bại')
-        return
-      }
-      setCheckResults(res.data.sessions)
-      setSuccess(
-        `Live: ${res.data.active} · Lỗi: ${res.data.unauthorized + res.data.error}`,
-      )
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không kết nối được API.')
-    } finally {
-      setChecking(false)
+  function applyMediaFile(file: File): boolean {
+    const validationError = validateChatMediaFile(file)
+    if (validationError) {
+      setError(validationError)
+      setMediaFile(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return false
     }
+    setError('')
+    setMediaFile(file)
+    return true
+  }
+
+  function normalizePastedFile(file: File, mimeType: string): File {
+    const type = (mimeType || file.type || 'image/png').split(';')[0].trim().toLowerCase()
+    if (file.name && file.name !== 'image.png' && !file.name.startsWith('blob')) {
+      return file
+    }
+    const ext =
+      type === 'image/jpeg'
+        ? 'jpg'
+        : type === 'image/webp'
+          ? 'webp'
+          : type === 'image/gif'
+            ? 'gif'
+            : type === 'video/mp4'
+              ? 'mp4'
+              : type === 'video/webm'
+                ? 'webm'
+                : 'png'
+    return new File([file], `paste-${Date.now()}.${ext}`, { type })
   }
 
   function handleMediaChange(file: File | null) {
-    setMediaFile(file)
+    if (!file) {
+      setMediaFile(null)
+      return
+    }
+    applyMediaFile(file)
+  }
+
+  function handleMediaPaste(event: React.ClipboardEvent<HTMLElement>) {
+    if (running || action !== 'send-media') return
+
+    const items = event.clipboardData?.items
+    if (!items?.length) return
+
+    for (const item of items) {
+      if (item.kind !== 'file') continue
+      const raw = item.getAsFile()
+      if (!raw) continue
+
+      const mimeType = (item.type || raw.type || '').split(';')[0].trim().toLowerCase()
+      const file = normalizePastedFile(raw, mimeType)
+      if (!detectChatMediaKind(file)) continue
+
+      event.preventDefault()
+      applyMediaFile(file)
+      return
+    }
   }
 
   async function handleAddPollOption(selectAfterAdd = true) {
@@ -578,149 +604,95 @@ export function TasksPage() {
   const needsTextField = actionMeta.needsText || action === 'send-media'
 
   return (
-    <div className="page page--tasks">
-      <header className="page-header tasks-page-header">
-        <div>
+    <div className="page page--tasks page--tasks-active">
+      <header className="panel tasks-hero">
+        <div className="tasks-hero-main">
           <span className="tasks-page-kicker">Bulk automation</span>
           <h1>Tác vụ hàng loạt</h1>
           <p className="page-desc">
-            Chọn nhiều acc, dán link bài post hoặc group, chạy lần lượt — react,
-            vote poll, reply, gửi tin, join/leave và hơn thế nữa.
+            Chọn acc, cấu hình hành động và chạy lần lượt — react, vote, reply, gửi tin,
+            join/leave.
           </p>
         </div>
-        <div className="tasks-header-actions">
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => void loadSessions()}
-            disabled={sessionsLoading || running}
-          >
-            Tải lại acc
-          </button>
-          <button
-            type="button"
-            className="btn btn--primary btn--sm"
-            onClick={() => void handleCheckSessions()}
-            disabled={checking || running || sessions.length === 0}
-          >
-            {checking ? 'Đang check…' : 'Check live'}
-          </button>
+        <div className="tasks-hero-metrics" aria-label="Thống kê nhanh">
+          <div className="tasks-metric">
+            <span className="tasks-metric-value">
+              {sessionsLoading ? '—' : sessions.length}
+            </span>
+            <span className="tasks-metric-label">Sessions</span>
+          </div>
+          <div className="tasks-metric tasks-metric--accent">
+            <span className="tasks-metric-value">{selectedList.length}</span>
+            <span className="tasks-metric-label">Đã chọn</span>
+          </div>
+          <div className="tasks-metric">
+            <span className="tasks-metric-value">{hasStatusData ? activeCount : '—'}</span>
+            <span className="tasks-metric-label">Live</span>
+          </div>
+          <div className="tasks-metric">
+            <span className="tasks-metric-value">
+              {progress.length > 0 ? `${progressStats.done}/${progressStats.total}` : '—'}
+            </span>
+            <span className="tasks-metric-label">Tiến trình</span>
+          </div>
         </div>
+        <button
+          type="button"
+          className="btn btn--ghost tasks-hero-reload"
+          onClick={() => void loadSessions()}
+          disabled={sessionsLoading || running}
+        >
+          {sessionsLoading ? 'Đang tải…' : 'Tải lại acc'}
+        </button>
       </header>
-
-      <section className="stats-grid tasks-stats">
-        <article className="stat-card">
-          <p className="stat-label">Sessions</p>
-          <p className="stat-value">{sessionsLoading ? '—' : sessions.length}</p>
-        </article>
-        <article className="stat-card stat-card--active">
-          <p className="stat-label">Đã chọn</p>
-          <p className="stat-value">{selectedList.length}</p>
-        </article>
-        <article className="stat-card">
-          <p className="stat-label">Acc live</p>
-          <p className="stat-value">
-            {checkResults.length > 0 ? activeCount : '—'}
-          </p>
-        </article>
-        <article className="stat-card">
-          <p className="stat-label">Tiến trình</p>
-          <p className="stat-value">
-            {progress.length > 0 ? `${progressStats.done}/${progressStats.total}` : '—'}
-          </p>
-        </article>
-      </section>
-
-      <nav className="tasks-steps" aria-label="Các bước thực hiện">
-        <div className={`tasks-step${currentStep >= 1 ? ' tasks-step--active' : ''}`}>
-          <span className="tasks-step-num">1</span>
-          <span className="tasks-step-label">Chọn tài khoản</span>
-        </div>
-        <div className={`tasks-step${currentStep >= 2 ? ' tasks-step--active' : ''}`}>
-          <span className="tasks-step-num">2</span>
-          <span className="tasks-step-label">Hành động & cấu hình</span>
-        </div>
-        <div className={`tasks-step${currentStep >= 3 ? ' tasks-step--active' : ''}`}>
-          <span className="tasks-step-num">3</span>
-          <span className="tasks-step-label">Chạy & theo dõi</span>
-        </div>
-      </nav>
 
       <Alert type="error" message={error} />
       <Alert type="success" message={success} />
 
-      <div className="tasks-layout">
-        <section className="panel tasks-accounts-panel">
-          <div className="tasks-accounts-head">
-            <div>
-              <h2>Tài khoản</h2>
-              <p className="panel-meta">
-                {selectedList.length}/{sessions.length} đã chọn
-              </p>
-            </div>
-          </div>
+      <div className="tasks-workspace">
+        <div className="tasks-workspace-row">
+        <AccountPickerPanel
+          className="tasks-sidebar tasks-accounts-panel"
+          title="Tài khoản"
+          meta={accountPickerMeta}
+          badgeCount={selectedList.length}
+          sessions={sessions}
+          loading={sessionsLoading}
+          getMeta={getMeta}
+          selectionMode="multiple"
+          selectedPhones={selectedPhones}
+          onSelectedPhonesChange={setSelectedPhones}
+          disabled={running}
+          busy={running}
+          showSelectActivePill
+          hasStatusData={hasStatusData}
+          showClearFiltersInToolbar
+          bodyBordered={false}
+          onFiltersChange={setAccountFilterState}
+        />
 
-          <div className="tasks-account-toolbar">
-            <button type="button" className="tasks-filter-pill" onClick={selectAll}>
-              Tất cả
-            </button>
-            <button
-              type="button"
-              className="tasks-filter-pill"
-              onClick={selectActiveOnly}
-              disabled={checkResults.length === 0}
-            >
-              Live
-            </button>
-            <button type="button" className="tasks-filter-pill" onClick={clearSelection}>
-              Bỏ chọn
-            </button>
-          </div>
+          <section className="panel tasks-config tasks-workflow-panel">
+            <nav className="tasks-stepper" aria-label="Các bước thực hiện">
+              <div
+                className={`tasks-stepper-item${currentStep >= 1 ? ' is-active' : ''}${currentStep > 1 ? ' is-done' : ''}`}
+              >
+                <span className="tasks-stepper-num">1</span>
+                <span className="tasks-stepper-label">Tài khoản</span>
+              </div>
+              <span className="tasks-stepper-line" aria-hidden />
+              <div
+                className={`tasks-stepper-item${currentStep >= 2 ? ' is-active' : ''}${currentStep > 2 ? ' is-done' : ''}`}
+              >
+                <span className="tasks-stepper-num">2</span>
+                <span className="tasks-stepper-label">Cấu hình</span>
+              </div>
+              <span className="tasks-stepper-line" aria-hidden />
+              <div className={`tasks-stepper-item${currentStep >= 3 ? ' is-active' : ''}`}>
+                <span className="tasks-stepper-num">3</span>
+                <span className="tasks-stepper-label">Chạy</span>
+              </div>
+            </nav>
 
-          <ul className="tasks-account-list">
-            {sessionsLoading ? (
-              <li className="tasks-account-empty">Đang tải sessions…</li>
-            ) : sessions.length === 0 ? (
-              <li className="tasks-account-empty">
-                <p>Chưa có session</p>
-                <p className="tasks-account-empty-hint">
-                  Đăng nhập ở trang Tài khoản trước.
-                </p>
-              </li>
-            ) : (
-              sessionRows.map(({ phone, check }) => {
-                const selected = selectedPhones.has(phone)
-                return (
-                  <li key={phone}>
-                    <label
-                      className={`tasks-account-item${selected ? ' tasks-account-item--selected' : ''}`}
-                    >
-                      <input
-                        type="checkbox"
-                        className="tasks-account-check"
-                        checked={selected}
-                        onChange={() => togglePhone(phone)}
-                        disabled={running}
-                      />
-                      <span className="tasks-account-main">
-                        <span className="tasks-account-phone">
-                          {getPickerLabel(phone, check?.username)}
-                        </span>
-                      </span>
-                      {check ? (
-                        <StatusBadge status={check.status} />
-                      ) : (
-                        <span className="tasks-account-muted">chưa check</span>
-                      )}
-                    </label>
-                  </li>
-                )
-              })
-            )}
-          </ul>
-        </section>
-
-        <section className="panel tasks-workflow-panel">
           <div className="tasks-category-bar" role="tablist" aria-label="Nhóm hành động">
             {TASK_ACTION_GROUPS.map((group) => (
               <button
@@ -761,7 +733,7 @@ export function TasksPage() {
             })}
           </div>
 
-          <div className="tasks-workflow-body">
+          <div className="tasks-config-scroll tasks-workflow-body">
             <div className="tasks-action-summary">
               <span className="tasks-action-summary-icon" aria-hidden>
                 {actionMeta.icon}
@@ -1159,11 +1131,11 @@ export function TasksPage() {
             {actionMeta.needsMedia ? (
               <div className="field tasks-field">
                 <span>File media</span>
-                <div className="tasks-file-upload">
+                <div className="tasks-file-upload" onPaste={handleMediaPaste}>
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*,video/*,.pdf,.zip,.doc,.docx"
+                    accept={CHAT_MEDIA_ACCEPT}
                     disabled={running}
                     onChange={(e) => handleMediaChange(e.target.files?.[0] ?? null)}
                   />
@@ -1184,7 +1156,9 @@ export function TasksPage() {
                       </button>
                     </div>
                   ) : (
-                    <p className="tasks-file-hint">Ảnh, video hoặc file — dùng chung cho mọi acc</p>
+                    <p className="tasks-file-hint">
+                      Ảnh, video hoặc file — dùng chung cho mọi acc · Ctrl+V để dán ảnh
+                    </p>
                   )}
                 </div>
               </div>
@@ -1205,6 +1179,7 @@ export function TasksPage() {
                   rows={4}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  onPaste={action === 'send-media' ? handleMediaPaste : undefined}
                   placeholder={
                     action === 'send-media'
                       ? 'Caption kèm file (có thể để trống)…'
@@ -1363,81 +1338,97 @@ export function TasksPage() {
               ) : null}
             </div>
 
-            <div className="tasks-run-actions">
-              <button
-                type="button"
-                className="btn btn--primary"
-                onClick={() => void handleRun()}
-                disabled={running || selectedList.length === 0}
-              >
-                {running ? 'Đang chạy…' : `Chạy ${selectedList.length} acc`}
-              </button>
-              {running ? (
-                <button type="button" className="btn btn--danger" onClick={handleStop}>
-                  Dừng
-                </button>
-              ) : null}
+          </div>
+
+          <div className="tasks-run-bar tasks-run-actions">
+            <div className="tasks-run-bar-summary">
+              <span className="tasks-run-bar-title">
+                {actionMeta.label}
+              </span>
+              <span className="tasks-run-bar-meta muted">
+                {selectedList.length} acc · {actionMeta.isPipeline ? '2 bước' : '1 bước'}
+              </span>
             </div>
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => void handleRun()}
+              disabled={running || selectedList.length === 0}
+            >
+              {running ? 'Đang chạy…' : `Chạy ${selectedList.length} acc`}
+            </button>
+            {running ? (
+              <button type="button" className="btn btn--danger" onClick={handleStop}>
+                Dừng
+              </button>
+            ) : null}
           </div>
         </section>
-      </div>
-
-      <section className="panel tasks-progress-panel">
-        <div className="tasks-progress-head">
-          <div>
-            <h2>Tiến trình</h2>
-            <p className="panel-meta">
-              {progress.length > 0
-                ? `${progressStats.done} xong · ${progressStats.failed} lỗi · ${progressStats.skipped} bỏ qua`
-                : 'Chưa chạy task'}
-            </p>
-          </div>
-          {progress.length > 0 ? (
-            <span className="tasks-progress-pct">{progressStats.pct}%</span>
-          ) : null}
         </div>
 
-        {progress.length > 0 ? (
-          <>
-            <div className="tasks-progress-bar" role="progressbar" aria-valuenow={progressStats.pct}>
-              <div
-                className="tasks-progress-bar-fill"
-                style={{ width: `${progressStats.pct}%` }}
-              />
+        <section
+          className={`panel tasks-progress-panel${progress.length === 0 ? ' tasks-progress-panel--idle' : ''}${running ? ' tasks-progress-panel--live' : ''}`}
+        >
+          <div className="tasks-progress-head">
+            <div>
+              <h2>Tiến trình</h2>
+              <p className="panel-meta">
+                {progress.length > 0
+                  ? `${progressStats.done} xong · ${progressStats.failed} lỗi · ${progressStats.skipped} bỏ qua`
+                  : 'Chọn acc và bấm Chạy để xem log từng tài khoản'}
+              </p>
             </div>
-            <div className="table-wrap tasks-table-wrap">
-              <table className="data-table tasks-progress-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Phone</th>
-                    <th>Trạng thái</th>
-                    <th>Kết quả</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {progress.map((row, index) => (
-                    <tr key={row.phone} className={`tasks-row--${row.status}`}>
-                      <td>{index + 1}</td>
-                      <td className="mono">{getPickerLabel(row.phone)}</td>
-                      <td>
-                        <span className={`tasks-status-pill tasks-status-pill--${row.status}`}>
-                          {statusLabel(row.status)}
-                        </span>
-                      </td>
-                      <td className="tasks-result-cell">{row.message}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        ) : (
-          <div className="tasks-progress-empty">
-            <p>Chọn acc, cấu hình hành động và bấm <strong>Chạy</strong> để xem log từng tài khoản.</p>
+            {progress.length > 0 ? (
+              <span className="tasks-progress-pct">{progressStats.pct}%</span>
+            ) : null}
           </div>
-        )}
-      </section>
+
+          {progress.length > 0 ? (
+            <div className="tasks-progress-body">
+              <div
+                className="tasks-progress-bar"
+                role="progressbar"
+                aria-valuenow={progressStats.pct}
+              >
+                <div
+                  className="tasks-progress-bar-fill"
+                  style={{ width: `${progressStats.pct}%` }}
+                />
+              </div>
+              <div className="table-wrap tasks-table-wrap">
+                <table className="data-table tasks-progress-table">
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Phone</th>
+                      <th>Trạng thái</th>
+                      <th>Kết quả</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {progress.map((row, index) => (
+                      <tr key={row.phone} className={`tasks-row--${row.status}`}>
+                        <td>{index + 1}</td>
+                        <td className="mono">{getPickerLabel(row.phone)}</td>
+                        <td>
+                          <span className={`tasks-status-pill tasks-status-pill--${row.status}`}>
+                            {statusLabel(row.status)}
+                          </span>
+                        </td>
+                        <td className="tasks-result-cell">{row.message}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <p className="tasks-progress-empty">
+              Chưa có log — chọn acc ở sidebar và bấm <strong>Chạy</strong>.
+            </p>
+          )}
+        </section>
+      </div>
     </div>
   )
 }

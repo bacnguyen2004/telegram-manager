@@ -879,7 +879,7 @@ export function RosterPage() {
           ) : sortedRows.length === 0 ? (
             <div className="roster-empty">
               {sheetRows.length === 0
-                ? 'Chưa có session — thêm ở Sessions hoặc Tài khoản.'
+                ? 'Chưa có session — thêm tài khoản ở Sessions.'
                 : 'Không có dòng khớp bộ lọc hiện tại.'}
             </div>
           ) : pagedRows.length === 0 ? (

@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { AuditPage } from './pages/AuditPage'
-import { AuthPage } from './pages/AuthPage'
+
 import { DashboardPage } from './pages/DashboardPage'
 import { DialogsPage } from './pages/DialogsPage'
 import { GroupsPage } from './pages/GroupsPage'
@@ -26,13 +26,13 @@ export const appRouter = createBrowserRouter([
       { path: 'conversation', element: <ConversationPage /> },
       { path: 'audit', element: <AuditPage /> },
       { path: 'health', element: <HealthPage /> },
-      { path: 'auth', element: <AuthPage /> },
+      { path: 'auth', element: <Navigate to="/sessions?add=1" replace /> },
       { path: 'security', element: <SecurityPage /> },
     ],
   },
-  { path: '/login', element: <Navigate to="/auth" replace /> },
-  { path: '/register', element: <Navigate to="/auth" replace /> },
-  { path: '/send-code', element: <Navigate to="/auth" replace /> },
+  { path: '/login', element: <Navigate to="/sessions?add=1" replace /> },
+  { path: '/register', element: <Navigate to="/sessions?add=1" replace /> },
+  { path: '/send-code', element: <Navigate to="/sessions?add=1" replace /> },
   { path: '/login-code', element: <Navigate to="/" replace /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ])
