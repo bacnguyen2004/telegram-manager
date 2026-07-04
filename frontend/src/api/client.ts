@@ -266,7 +266,8 @@ export const api = {
     )
   },
 
-  listDialogs(phone: string, limit = 200) {
+  /** Mặc định 500 — backend cho phép tối đa 500; acc nhiều DM/group cần cao hơn 200. */
+  listDialogs(phone: string, limit = 500) {
     return request<DialogsData>(
       `/dialogs/${encodeURIComponent(phone)}?limit=${limit}`,
     )
@@ -672,7 +673,10 @@ export const api = {
 
   createConversationJob(
     script: import('../utils/conversationScript').ConversationScript,
-    options?: { startLineId?: number },
+    options?: {
+      startLineId?: number
+      carriedLineResults?: import('../utils/conversationScript').ConversationLineResult[]
+    },
   ) {
     return request<{ job_id: number; status: string; total_lines: number }>(
       '/conversation/jobs',
@@ -681,6 +685,7 @@ export const api = {
         body: JSON.stringify({
           script,
           start_line_id: options?.startLineId ?? null,
+          carried_line_results: options?.carriedLineResults ?? [],
         }),
       },
     )

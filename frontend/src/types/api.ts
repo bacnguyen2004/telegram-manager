@@ -260,6 +260,7 @@ export interface DialogsData {
   status: 'success' | 'error'
   phone: string
   total: number
+  limit?: number
   counts: DialogCounts
   dialogs: DialogItem[]
   message: string

@@ -1,23 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './ConversationPage.css'
 import { api } from '../api/client'
-import { Alert } from '../components/Alert'
+import { ConversationPageView } from './ConversationPageView'
 import { useSessionAccounts } from '../hooks/useSessionAccounts'
 import {
-  analyzeConversationPrompt,
   buildDefaultCryptoPrompt,
   defaultMultiSpeakerNames,
   resolveConversationPrompt,
   type ConversationPromptStyle,
 } from '../utils/conversationPrompts'
 import {
+  buildMultiSpeakersFromDetected,
   buildPreviewLines,
   buildScriptPayload,
-  CONVERSATION_TEMPLATE,
   DEFAULT_CONVERSATION_TIMING,
   detectSpeakersFromScript,
   effectiveConversationScript,
+  speakersMissingFromConfig,
+  summarizeParseIssueMessages,
+  summarizeParseIssues,
   isDefaultConversationTemplate,
+  isActionablePreviewLine,
+  previewLinePhase,
+  type ConversationSpeaker,
   lineStatusLabel,
   loadConversationDraft,
   pickUnusedPhoneFromList,
@@ -29,7 +34,6 @@ import {
   speakersForApi,
   type ConversationJobData,
   type ConversationJobSummary,
-  type ConversationMode,
   type ConversationPreviewLine,
   type ConversationScript,
   type ConversationTiming,
@@ -39,7 +43,7 @@ import {
 
 const ACTIVE_JOB_STATUSES = new Set(['pending', 'running'])
 
-type PreviewFilter = 'all' | 'error' | 'pending'
+type PreviewFilter = 'all' | 'todo' | 'done' | 'error'
 
 function formatJobTime(iso: string): string {
   try {
@@ -87,62 +91,43 @@ function speakerBadgeLabel(name: string): string {
 }
 
 function rowClass(line: ConversationPreviewLine, activeId: number): string {
-  const classes = ['conv-preview-row']
-  if (line.lineId === activeId) classes.push('conv-preview-row--active')
-  if (line.status === 'success') classes.push('conv-preview-row--sent')
-  if (line.status === 'error') classes.push('conv-preview-row--error')
-  return classes.join(' ')
+  return [
+    'conv-preview__feed-item',
+    `is-phase-${previewLinePhase(line.status)}`,
+    line.lineId === activeId ? 'is-active' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
-function ConvPanelIcon({ kind }: { kind: 'prompt' | 'telegram' | 'script' | 'preview' | 'job' }) {
-  const paths: Record<typeof kind, string> = {
-    prompt:
-      'M8 6h8M8 10h8M8 14h5M6 4h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z',
-    telegram:
-      'M4 10.5 18 4l-3.2 14.5-4.3-3.3-2.5 2.4V10.5Z',
-    script:
-      'M7 5h10M7 9h10M7 13h6M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z',
-    preview:
-      'M8 10a2 2 0 1 0 4 0 2 2 0 0 0-4 0Zm8-2.5A8 8 0 1 1 4 7.5',
-    job:
-      'M6 6h12v12H6V6Zm3 3h6M9 15h6',
-  }
-  return (
-    <span className={`conv-panel-icon conv-panel-icon--${kind}`} aria-hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <path d={paths[kind]} strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </span>
-  )
-}
-
-function ConvEmptyChatIcon() {
-  return (
-    <svg className="conv-empty-chat-icon" viewBox="0 0 64 64" fill="none" aria-hidden>
-      <circle cx="32" cy="32" r="28" stroke="currentColor" strokeWidth="1.5" opacity="0.18" />
-      <path
-        d="M18 26c0-5.523 6.268-10 14-10s14 4.477 14 10v2c0 5.523-6.268 10-14 10-1.63 0-3.2-.22-4.62-.64L18 50l2.38-7.14C19.22 41.8 18 40.1 18 38v-2Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
+function buildSpeakerRoster(
+  count: number,
+  prev: MultiSpeakerRow[],
+  phones: string[],
+): MultiSpeakerRow[] {
+  const safeCount = Math.max(2, Math.min(count, 10))
+  const defaultNames = defaultMultiSpeakerNames(safeCount)
+  const usedPhones: string[] = []
+  return defaultNames.map((fallbackName, index) => {
+    const keptSpeaker = prev[index]?.speaker?.trim() || fallbackName
+    const keptPhone = prev[index]?.phone?.trim() ?? ''
+    const phone =
+      keptPhone && !usedPhones.includes(keptPhone)
+        ? keptPhone
+        : pickUnusedPhoneFromList(phones, usedPhones)
+    if (phone) usedPhones.push(phone)
+    return { speaker: keptSpeaker, phone }
+  })
 }
 
 export function ConversationPage() {
-  const { sessions, loading: sessionsLoading, reload, getPickerLabel } =
+  const { sessions, loading: sessionsLoading, reload, getPickerLabel, getMeta } =
     useSessionAccounts()
   const [groupLink, setGroupLink] = useState('')
-  const [mode, setMode] = useState<ConversationMode>('multi')
   const [promptStyle, setPromptStyle] = useState<ConversationPromptStyle>('flexible')
   const [promptMessageCount, setPromptMessageCount] = useState(120)
   const [promptSpeakerCount, setPromptSpeakerCount] = useState(4)
   const [promptText, setPromptText] = useState('')
-  const [speakerA, setSpeakerA] = useState('Person A')
-  const [speakerB, setSpeakerB] = useState('Person B')
-  const [phoneA, setPhoneA] = useState('')
-  const [phoneB, setPhoneB] = useState('')
   const [multiSpeakers, setMultiSpeakers] = useState<MultiSpeakerRow[]>([
     { speaker: 'Person A', phone: '' },
     { speaker: 'Person B', phone: '' },
@@ -153,7 +138,7 @@ export function ConversationPage() {
   const [timing, setTiming] = useState<ConversationTiming>(DEFAULT_CONVERSATION_TIMING)
   const [enableDelay, setEnableDelay] = useState(true)
   const [enableSpeakerDelay, setEnableSpeakerDelay] = useState(true)
-  const [replyOnSpeakerChange, setReplyOnSpeakerChange] = useState(true)
+  const [enableTypingDelay, setEnableTypingDelay] = useState(true)
   const [continueOnError, setContinueOnError] = useState(false)
   const [preview, setPreview] = useState<ConversationValidateData | null>(null)
   const [previewLines, setPreviewLines] = useState<ConversationPreviewLine[]>([])
@@ -170,18 +155,7 @@ export function ConversationPage() {
   const jobIdRef = useRef<number | null>(null)
   const previewScrollRef = useRef<HTMLDivElement>(null)
 
-  const apiSpeakers = useMemo(
-    () =>
-      speakersForApi({
-        mode,
-        speakerA,
-        speakerB,
-        phoneA,
-        phoneB,
-        multiSpeakers,
-      }),
-    [mode, speakerA, speakerB, phoneA, phoneB, multiSpeakers],
-  )
+  const apiSpeakers = useMemo(() => speakersForApi(multiSpeakers), [multiSpeakers])
 
   const speakerFormError = useMemo(
     () => speakerConfigError(apiSpeakers),
@@ -194,30 +168,17 @@ export function ConversationPage() {
 
   function syncFormFromJobScript(script: ConversationScript) {
     const speakers = script.speakers
-    if (speakers.length > 2) {
-      setMode('multi')
-      setMultiSpeakers(
-        speakers.map((item) => ({ speaker: item.label, phone: item.phone })),
-      )
-      setPromptSpeakerCount(speakers.length)
-    } else {
-      setMode('two')
-      if (speakers[0]) {
-        setSpeakerA(speakers[0].label)
-        setPhoneA(speakers[0].phone)
-      }
-      if (speakers[1]) {
-        setSpeakerB(speakers[1].label)
-        setPhoneB(speakers[1].phone)
-      }
-    }
+    setMultiSpeakers(speakers.map((item) => ({ speaker: item.label, phone: item.phone })))
+    setPromptSpeakerCount(Math.max(2, speakers.length))
     if (script.timing) setTiming(script.timing)
     setEnableDelay(script.timing.delay_max_sec > 0 || script.timing.delay_min_sec > 0)
     setEnableSpeakerDelay(
       script.timing.speaker_change_delay_max_sec > 0 ||
         script.timing.speaker_change_delay_min_sec > 0,
     )
-    setReplyOnSpeakerChange(script.reply_on_speaker_change)
+    setEnableTypingDelay(
+      (script.timing.typing_max_sec ?? 0) > 0 || (script.timing.typing_min_sec ?? 0) > 0,
+    )
     setContinueOnError(script.continue_on_error)
   }
 
@@ -232,7 +193,17 @@ export function ConversationPage() {
       jobData.line_results.find((item) => item.status === 'pending') ??
       jobData.line_results.find((item) => item.status === 'running')
     if (focusLine) setActiveLineId(focusLine.line_id)
-    else if (jobData.script.lines[0]) setActiveLineId(jobData.script.lines[0].id)
+    else {
+      const firstActionable = jobData.line_results.find(
+        (item) => item.status === 'pending' || item.status === 'running' || item.status === 'error',
+      )
+      if (firstActionable) setActiveLineId(firstActionable.line_id)
+      else if (jobData.script.lines[0]) setActiveLineId(jobData.script.lines[0].id)
+    }
+    const hasDoneOrSkip = jobData.line_results.some(
+      (item) => item.status === 'success' || item.status === 'skipped',
+    )
+    if (hasDoneOrSkip) setPreviewFilter('todo')
   }
 
   const effectiveTiming = useMemo<ConversationTiming>(
@@ -245,23 +216,23 @@ export function ConversationPage() {
       speaker_change_delay_max_sec: enableSpeakerDelay
         ? timing.speaker_change_delay_max_sec
         : 0,
+      typing_min_sec: enableTypingDelay ? timing.typing_min_sec : 0,
+      typing_max_sec: enableTypingDelay ? timing.typing_max_sec : 0,
     }),
-    [enableDelay, enableSpeakerDelay, timing],
+    [enableDelay, enableSpeakerDelay, enableTypingDelay, timing],
   )
 
-  const effectiveSpeakerCount = mode === 'multi' ? promptSpeakerCount : 2
+  const effectiveSpeakerCount = promptSpeakerCount
 
   const promptPlaceholder = useMemo(
     () =>
       buildDefaultCryptoPrompt({
         messageCount: promptMessageCount,
         speakerCount: effectiveSpeakerCount,
-        mode: mode === 'two' ? 'two' : 'multi',
+        mode: 'multi',
       }),
-    [promptMessageCount, effectiveSpeakerCount, mode],
+    [promptMessageCount, effectiveSpeakerCount],
   )
-
-  const usesPromptPlaceholder = !promptText.trim()
 
   const effectivePrompt = useMemo(
     () =>
@@ -270,30 +241,25 @@ export function ConversationPage() {
         placeholder: promptPlaceholder,
         messageCount: promptMessageCount,
         speakerCount: effectiveSpeakerCount,
-        mode: mode === 'two' ? 'two' : 'multi',
+        mode: 'multi',
       }),
-    [
-      promptText,
-      promptPlaceholder,
-      promptMessageCount,
-      effectiveSpeakerCount,
-      mode,
-    ],
-  )
-
-  const promptAnalysis = useMemo(
-    () =>
-      analyzeConversationPrompt(effectivePrompt, {
-        messageCount: promptMessageCount,
-        speakerCount: effectiveSpeakerCount,
-        usesPlaceholder: usesPromptPlaceholder,
-      }),
-    [effectivePrompt, promptMessageCount, effectiveSpeakerCount, usesPromptPlaceholder],
+    [promptText, promptPlaceholder, promptMessageCount, effectiveSpeakerCount],
   )
 
   const effectiveScriptText = useMemo(
     () => effectiveConversationScript(scriptText),
     [scriptText],
+  )
+
+  const scriptSpeakersDetected = useMemo(
+    () => (scriptText.trim() ? detectSpeakersFromScript(effectiveScriptText) : []),
+    [scriptText, effectiveScriptText],
+  )
+
+  const scriptSpeakersMissing = useMemo(
+    () =>
+      scriptText.trim() ? speakersMissingFromConfig(effectiveScriptText, apiSpeakers) : [],
+    [scriptText, effectiveScriptText, apiSpeakers],
   )
 
   const loadJobHistory = useCallback(async () => {
@@ -305,24 +271,37 @@ export function ConversationPage() {
     }
   }, [])
 
+  const fillEmptySpeakerPhones = useCallback((phones: string[]) => {
+    if (!phones.length) return
+    setMultiSpeakers((prev) => {
+      const used = prev.map((row) => row.phone).filter(Boolean)
+      let changed = false
+      const next = prev.map((row) => {
+        if (row.phone.trim()) return row
+        const phone = pickUnusedPhoneFromList(phones, used)
+        if (!phone) return row
+        used.push(phone)
+        changed = true
+        return { ...row, phone }
+      })
+      return changed ? next : prev
+    })
+  }, [])
+
   const loadSessions = useCallback(async () => {
     setError('')
     try {
       const result = await reload()
       if (!result) return
-      const phones = result.sessions
-      setPhoneA((prev) => prev || phones[0] || '')
-      setPhoneB((prev) => prev || phones[1] || '')
+      fillEmptySpeakerPhones(result.sessions)
     } catch {
       setError('Không kết nối được API. Kiểm tra backend port 8001.')
     }
-  }, [reload])
+  }, [reload, fillEmptySpeakerPhones])
 
   useEffect(() => {
-    if (sessions.length === 0) return
-    setPhoneA((prev) => prev || sessions[0] || '')
-    setPhoneB((prev) => prev || sessions[1] || '')
-  }, [sessions])
+    fillEmptySpeakerPhones(sessions)
+  }, [sessions, fillEmptySpeakerPhones])
 
   useEffect(() => {
     const draft = loadConversationDraft()
@@ -333,30 +312,45 @@ export function ConversationPage() {
           isDefaultConversationTemplate(draft.scriptText) ? '' : draft.scriptText,
         )
       }
-      if (draft.mode === 'two' || draft.mode === 'multi') setMode(draft.mode)
       if (draft.promptStyle === 'fixed' || draft.promptStyle === 'flexible') {
         setPromptStyle(draft.promptStyle)
       }
       if (typeof draft.promptMessageCount === 'number') {
         setPromptMessageCount(draft.promptMessageCount)
       }
-      if (typeof draft.promptSpeakerCount === 'number') {
-        setPromptSpeakerCount(draft.promptSpeakerCount)
-      }
-      if (typeof draft.speakerA === 'string') setSpeakerA(draft.speakerA)
-      if (typeof draft.speakerB === 'string') setSpeakerB(draft.speakerB)
-      if (typeof draft.phoneA === 'string') setPhoneA(draft.phoneA)
-      if (typeof draft.phoneB === 'string') setPhoneB(draft.phoneB)
+      let loadedSpeakers: MultiSpeakerRow[] = [
+        { speaker: 'Person A', phone: '' },
+        { speaker: 'Person B', phone: '' },
+        { speaker: 'Person C', phone: '' },
+        { speaker: 'Person D', phone: '' },
+      ]
       if (Array.isArray(draft.multiSpeakers)) {
-        setMultiSpeakers(draft.multiSpeakers as MultiSpeakerRow[])
+        loadedSpeakers = draft.multiSpeakers as MultiSpeakerRow[]
+      } else if (draft.mode === 'two') {
+        loadedSpeakers = [
+          {
+            speaker: typeof draft.speakerA === 'string' ? draft.speakerA : 'Person A',
+            phone: typeof draft.phoneA === 'string' ? draft.phoneA : '',
+          },
+          {
+            speaker: typeof draft.speakerB === 'string' ? draft.speakerB : 'Person B',
+            phone: typeof draft.phoneB === 'string' ? draft.phoneB : '',
+          },
+        ]
       }
+      const loadedCount =
+        typeof draft.promptSpeakerCount === 'number'
+          ? Math.max(2, Math.min(draft.promptSpeakerCount, 10))
+          : loadedSpeakers.length
+      setPromptSpeakerCount(loadedCount)
+      setMultiSpeakers(buildSpeakerRoster(loadedCount, loadedSpeakers, []))
       if (draft.timing) setTiming({ ...DEFAULT_CONVERSATION_TIMING, ...(draft.timing as object) })
       if (typeof draft.enableDelay === 'boolean') setEnableDelay(draft.enableDelay)
       if (typeof draft.enableSpeakerDelay === 'boolean') {
         setEnableSpeakerDelay(draft.enableSpeakerDelay)
       }
-      if (typeof draft.replyOnSpeakerChange === 'boolean') {
-        setReplyOnSpeakerChange(draft.replyOnSpeakerChange)
+      if (typeof draft.enableTypingDelay === 'boolean') {
+        setEnableTypingDelay(draft.enableTypingDelay)
       }
       if (typeof draft.continueOnError === 'boolean') {
         setContinueOnError(draft.continueOnError)
@@ -379,39 +373,29 @@ export function ConversationPage() {
     saveConversationDraft({
       groupLink,
       scriptText,
-      mode,
       promptStyle,
       promptMessageCount,
       promptSpeakerCount,
       promptText,
-      speakerA,
-      speakerB,
-      phoneA,
-      phoneB,
       multiSpeakers,
       timing,
       enableDelay,
       enableSpeakerDelay,
-      replyOnSpeakerChange,
+      enableTypingDelay,
       continueOnError,
     })
   }, [
     groupLink,
     scriptText,
-    mode,
     promptStyle,
     promptMessageCount,
     promptSpeakerCount,
     promptText,
-    speakerA,
-    speakerB,
-    phoneA,
-    phoneB,
     multiSpeakers,
     timing,
     enableDelay,
     enableSpeakerDelay,
-    replyOnSpeakerChange,
+    enableTypingDelay,
     continueOnError,
     draftHydrated,
   ])
@@ -467,17 +451,64 @@ export function ConversationPage() {
     }
   }, [pollEpoch, loadJobHistory])
 
-  const activeLine = previewLines.find((line) => line.lineId === activeLineId) ?? previewLines[0]
+  const activeLine = useMemo(() => {
+    const selected = previewLines.find((line) => line.lineId === activeLineId)
+    if (selected) return selected
+    return (
+      previewLines.find((line) => isActionablePreviewLine(line.status)) ?? previewLines[0]
+    )
+  }, [previewLines, activeLineId])
 
   function getSpeakers() {
-    return speakersForApi({
-      mode,
-      speakerA,
-      speakerB,
-      phoneA,
-      phoneB,
-      multiSpeakers,
-    })
+    return speakersForApi(multiSpeakers)
+  }
+
+  function previewNeedsRefresh(): boolean {
+    if (!preview?.script?.lines?.length) return true
+    if (!preview.valid) return true
+    if (speakersMissingFromConfig(effectiveScriptText, getSpeakers()).length > 0) return true
+    return preview.issues.some((item) => item.level === 'error')
+  }
+
+  async function parseConversationScript(speakers: ConversationSpeaker[]) {
+    return api.parseConversation(
+      buildScriptPayload(groupLink, speakers, effectiveScriptText, {
+        timing: effectiveTiming,
+        continueOnError,
+      }),
+    )
+  }
+
+  function applyParseResult(data: ConversationValidateData, speakers: ConversationSpeaker[]) {
+    const errors = data.issues.filter((item) => item.level === 'error')
+    const warnings = data.issues.filter((item) => item.level === 'warning')
+    const missing = speakersMissingFromConfig(effectiveScriptText, speakers)
+    const hasErrors = !data.valid || errors.length > 0
+
+    if (hasErrors) {
+      setPreview(null)
+      setActiveLineId(0)
+      setInfo('')
+      setError(
+        summarizeParseIssueMessages(errors).join(' · ') || 'Kịch bản không hợp lệ — chưa tách được xem trước',
+      )
+      return
+    }
+
+    setPreview(data)
+    if (data.script?.lines.length) {
+      setActiveLineId(data.script.lines[0].id)
+    }
+    if (warnings.length) {
+      setSuccess(`Đã tách ${data.line_count} dòng · ${warnings.map((item) => item.message).join(' · ')}`)
+    } else {
+      setSuccess(`Đã tách ${data.line_count} dòng`)
+    }
+    if (missing.length) {
+      setInfo(
+        `Kịch bản có ${missing.length} vai chưa cấu hình (${missing.join(', ')}). Giữ ${speakers.length} vai hiện tại — bấm Nhận diện nếu muốn sync roster.`,
+      )
+    }
   }
 
   function focusIssueLine(lineId?: number | null) {
@@ -494,37 +525,17 @@ export function ConversationPage() {
     setError('')
     setSuccess('')
     try {
-      const res = await api.parseConversation(
-        buildScriptPayload(groupLink, getSpeakers(), effectiveScriptText, {
-          timing: effectiveTiming,
-          replyOnSpeakerChange,
-          continueOnError,
-        }),
-      )
+      const speakers = getSpeakers()
+      const res = await parseConversationScript(speakers)
       if (!res.success || !res.data) {
         setError(res.error ?? 'Tách nội dung thất bại')
         setPreview(null)
         return
       }
-      setPreview(res.data)
-      const errors = res.data.issues.filter((item) => item.level === 'error')
-      const warnings = res.data.issues.filter((item) => item.level === 'warning')
-      const firstIssueLine = errors.find((item) => item.line_id)?.line_id
-      if (firstIssueLine) {
-        setActiveLineId(firstIssueLine)
-      } else if (res.data.script?.lines.length) {
-        setActiveLineId(res.data.script.lines[0].id)
-      }
-      if (errors.length) {
-        setError(errors.map((item) => item.message).join(' · '))
-      } else if (warnings.length) {
-        setSuccess(
-          `Đã tách ${res.data.line_count} dòng · ${warnings.map((item) => item.message).join(' · ')}`,
-        )
-      } else {
-        setSuccess(`Đã tách ${res.data.line_count} dòng`)
-      }
+      applyParseResult(res.data, speakers)
     } catch (err) {
+      setPreview(null)
+      setActiveLineId(0)
       setError(err instanceof Error ? err.message : 'Tách nội dung thất bại')
     } finally {
       setBusy(false)
@@ -541,23 +552,25 @@ export function ConversationPage() {
     setSuccess('')
     try {
       let script: ConversationScript | null = preview?.script ?? null
-      if (!script?.lines?.length) {
-        const parsed = await api.parseConversation(
-          buildScriptPayload(groupLink, getSpeakers(), effectiveScriptText, {
-            timing: effectiveTiming,
-            replyOnSpeakerChange,
-            continueOnError,
-          }),
-        )
-        if (!parsed.success || !parsed.data?.script || !parsed.data.valid) {
-          setError(
-            parsed.data?.issues.map((item) => item.message).join(' · ') ??
-              'Kịch bản không hợp lệ',
+      if (previewNeedsRefresh()) {
+        const speakers = getSpeakers()
+        const parsed = await parseConversationScript(speakers)
+        if (!parsed.success || !parsed.data) {
+          setError(parsed.error ?? 'Tách nội dung thất bại')
+          return
+        }
+        applyParseResult(parsed.data, speakers)
+        if (!parsed.data.valid || !parsed.data.script?.lines.length) {
+          const issueMessages = summarizeParseIssueMessages(
+            parsed.data.issues.filter((item) => item.level === 'error'),
           )
+          setError(issueMessages.join(' · ') || 'Kịch bản không hợp lệ')
           return
         }
         script = parsed.data.script
-        setPreview(parsed.data)
+      } else if (!script?.lines?.length) {
+        setError('Chưa tách kịch bản — bấm Tách nội dung trước')
+        return
       }
 
       const payload = { ...script, timing: effectiveTiming }
@@ -567,7 +580,17 @@ export function ConversationPage() {
         return
       }
 
-      const created = await api.createConversationJob(payload, { startLineId })
+      const carriedLineResults =
+        startLineId && job?.line_results?.length
+          ? job.line_results.filter(
+              (item) => item.line_id < startLineId && item.status === 'success',
+            )
+          : undefined
+
+      const created = await api.createConversationJob(payload, {
+        startLineId,
+        carriedLineResults,
+      })
       if (!created.success || !created.data) {
         setError(created.error ?? 'Không tạo được tác vụ')
         return
@@ -680,38 +703,14 @@ export function ConversationPage() {
       setError('Không nhận diện được vai nào từ nội dung')
       return
     }
-    const previous = new Map(
-      multiSpeakers.map((row) => [row.speaker.trim().toLowerCase(), row.phone]),
-    )
-    setMultiSpeakers(
-      detected.map((speaker, index) => ({
-        speaker,
-        phone:
-          previous.get(speaker.toLowerCase()) ??
-          sessions[index] ??
-          sessions[0] ??
-          '',
-      })),
-    )
+    setMultiSpeakers(buildMultiSpeakersFromDetected(detected, multiSpeakers, sessions))
     setPromptSpeakerCount(Math.max(2, Math.min(detected.length, 10)))
     setSuccess(`Đã nhận diện ${detected.length} vai`)
   }
 
   function syncMultiSpeakerCount(count: number) {
     const safeCount = Math.max(2, Math.min(count, 10))
-    const names = defaultMultiSpeakerNames(safeCount)
-    setMultiSpeakers((prev) => {
-      const usedPhones: string[] = []
-      return names.map((speaker, index) => {
-        const keptPhone = prev[index]?.phone?.trim() ?? ''
-        const phone =
-          keptPhone && !usedPhones.includes(keptPhone)
-            ? keptPhone
-            : pickUnusedPhoneFromList(sessions, usedPhones)
-        if (phone) usedPhones.push(phone)
-        return { speaker, phone }
-      })
-    })
+    setMultiSpeakers((prev) => buildSpeakerRoster(safeCount, prev, sessions))
     setPromptSpeakerCount(safeCount)
   }
 
@@ -719,40 +718,25 @@ export function ConversationPage() {
     setMultiSpeakers((prev) => {
       if (prev.length >= 10) return prev
       const used = prev.map((row) => row.phone).filter(Boolean)
-      return [
+      const next = [
         ...prev,
         {
           speaker: `Person ${String.fromCharCode(65 + prev.length)}`,
           phone: pickUnusedPhoneFromList(sessions, used),
         },
       ]
+      setPromptSpeakerCount(next.length)
+      return next
     })
   }
 
   function removeMultiSpeaker(index: number) {
     setMultiSpeakers((prev) => {
       if (prev.length <= 2) return prev
-      return prev.filter((_, i) => i !== index)
+      const next = prev.filter((_, i) => i !== index)
+      setPromptSpeakerCount(next.length)
+      return next
     })
-  }
-
-  useEffect(() => {
-    if (mode === 'two') {
-      setPromptSpeakerCount(2)
-      return
-    }
-    setPromptSpeakerCount((prev) =>
-      prev === multiSpeakers.length ? prev : multiSpeakers.length,
-    )
-  }, [mode, multiSpeakers.length])
-
-  function setConversationMode(next: ConversationMode) {
-    setMode(next)
-    if (next === 'two') {
-      setPromptSpeakerCount(2)
-      return
-    }
-    setPromptSpeakerCount((prev) => (prev <= 2 ? 4 : prev))
   }
 
   function clearPromptOverride() {
@@ -782,14 +766,6 @@ export function ConversationPage() {
     setInfo('Đã sao chép prompt cho GPT')
     setError('')
   }
-
-  function clearNotices() {
-    setError('')
-    setSuccess('')
-    setInfo('')
-  }
-
-  const hasNotices = Boolean(error || success || info)
 
   async function copyMessagesOnly() {
     const text = previewLines.map((line) => line.message).join('\n')
@@ -829,6 +805,8 @@ export function ConversationPage() {
   const parseIssues = preview?.issues ?? []
   const parseErrors = parseIssues.filter((item) => item.level === 'error')
   const parseWarnings = parseIssues.filter((item) => item.level === 'warning')
+  const parseErrorSummaries = useMemo(() => summarizeParseIssues(parseErrors), [parseErrors])
+  const parseWarningSummaries = useMemo(() => summarizeParseIssues(parseWarnings), [parseWarnings])
   const runBlockReason = speakerFormError
     ? speakerFormError
     : !groupLink.trim()
@@ -869,1014 +847,126 @@ export function ConversationPage() {
     if (previewFilter === 'error') {
       return previewLines.filter((line) => line.status === 'error')
     }
-    if (previewFilter === 'pending') {
-      return previewLines.filter((line) => line.status === 'pending')
+    if (previewFilter === 'done') {
+      return previewLines.filter((line) => line.status === 'success')
+    }
+    if (previewFilter === 'todo') {
+      return previewLines.filter((line) => isActionablePreviewLine(line.status))
     }
     return previewLines
   }, [previewFilter, previewLines])
+
+  const runFromLineBlockReason = useMemo(() => {
+    if (runBlockReason) return runBlockReason
+    if (!activeLine) return 'Chưa chọn dòng'
+    if (activeLine.status === 'success') return 'Dòng này đã gửi — chọn dòng chưa gửi'
+    if (activeLine.status === 'skipped') return 'Dòng này không chạy — chọn dòng cần gửi'
+    if (activeLine.status === 'running') return 'Dòng đang gửi'
+    return ''
+  }, [runBlockReason, activeLine])
   const pendingLineCount = job?.line_results.filter((item) => item.status === 'pending').length ?? 0
 
   function accountOptionsForRow(currentPhone: string, otherPhones: string[]) {
     return sessionOptionsForSpeaker(sessions, otherPhones, currentPhone)
   }
 
-  const promptModeLabel = promptText.trim() ? 'Đang ghi đè' : 'Mẫu crypto'
+  const promptModeLabel = promptText.trim() ? 'Tuỳ chỉnh' : 'Mẫu crypto'
   const scriptModeLabel = scriptText.trim() ? 'Nội dung đã dán' : 'Mẫu ví dụ'
 
   return (
-    <div className="page page--conversation">
-      <header className="conv-hero">
-        <div className="conv-hero-main">
-          <span className="conv-page-kicker">Natural chat</span>
-          <h1>Hội thoại tự nhiên</h1>
-          <p className="page-desc">
-            Tạo kịch bản bằng GPT, gán account cho từng vai và chạy tự động với delay ngẫu nhiên
-            — giống người thật trò chuyện trong nhóm.
-          </p>
-          <div className="conv-hero-chips">
-            <span className="conv-hero-chip">Bước {currentStep}/3</span>
-            <span className="conv-hero-chip conv-hero-chip--accent">
-              {effectiveSpeakerCount} vai · {promptMessageCount} tin
-            </span>
-            {preview?.line_count ? (
-              <span className="conv-hero-chip conv-hero-chip--success">
-                {preview.line_count} dòng đã tách
-              </span>
-            ) : null}
-          </div>
-        </div>
-        <div className="conv-header-actions">
-          <button
-            type="button"
-            className="btn btn--ghost btn--sm"
-            onClick={() => void loadSessions()}
-            disabled={sessionsLoading || busy}
-          >
-            {sessionsLoading ? 'Đang tải…' : 'Tải lại acc'}
-          </button>
-        </div>
-      </header>
-
-      <section className="stats-grid conv-stats">
-        <article className="stat-card conv-stat-card conv-stat-card--prompt">
-          <p className="stat-label">Prompt GPT</p>
-          <p className="stat-value stat-value--sm">
-            {promptMessageCount} tin · {effectiveSpeakerCount} vai
-          </p>
-          <p className="stat-foot conv-stat-foot">{promptModeLabel}</p>
-        </article>
-        <article
-          className={`stat-card conv-stat-card conv-stat-card--lines${preview?.line_count ? ' stat-card--active' : ''}`}
-        >
-          <p className="stat-label">Dòng kịch bản</p>
-          <p className="stat-value">{preview?.line_count ?? 0}</p>
-          <p className="stat-foot conv-stat-foot">{scriptModeLabel}</p>
-        </article>
-        <article className="stat-card conv-stat-card conv-stat-card--accounts">
-          <p className="stat-label">Accounts</p>
-          <p className="stat-value">{sessionsLoading ? '—' : sessions.length}</p>
-          <p className="stat-foot conv-stat-foot">Telegram sessions</p>
-        </article>
-        <article className="stat-card conv-stat-card conv-stat-card--progress">
-          <p className="stat-label">Tiến trình</p>
-          <p className="stat-value stat-value--sm">{jobProgress}</p>
-          <p className="stat-foot conv-stat-foot">
-            {job ? jobStatusLabel(job.status) : 'Chưa chạy'}
-          </p>
-        </article>
-      </section>
-
-      <nav className="conv-steps" aria-label="Các bước thực hiện">
-        {(
-          [
-            ['Cấu hình & gán vai', 1],
-            ['Kịch bản & xem trước', 2],
-            ['Chạy & theo dõi', 3],
-          ] as const
-        ).map(([label, step]) => (
-          <div
-            key={step}
-            className={[
-              'conv-step',
-              currentStep === step ? ' conv-step--active' : '',
-              currentStep > step ? ' conv-step--done' : '',
-            ].join('')}
-          >
-            <span className="conv-step-num">{step}</span>
-            <span className="conv-step-label">{label}</span>
-          </div>
-        ))}
-      </nav>
-
-      {hasNotices ? (
-        <div className="conv-notice-stack" aria-live="polite">
-          <Alert type="error" message={error} onDismiss={() => setError('')} />
-          <Alert type="success" message={success} onDismiss={() => setSuccess('')} />
-          <Alert type="info" message={info} onDismiss={() => setInfo('')} />
-          {(error && (success || info)) || (success && info) ? (
-            <button type="button" className="conv-notice-clear btn btn--ghost btn--sm" onClick={clearNotices}>
-              Xóa tất cả thông báo
-            </button>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div className="conv-workspace">
-        <div className="conv-col conv-col--left">
-          <div className="panel conv-panel conv-panel--prompt">
-            <div className="conv-panel-head">
-              <div className="conv-panel-head-main">
-                <ConvPanelIcon kind="prompt" />
-                <div>
-                  <p className="conv-panel-step">Bước 1 · GPT</p>
-                  <h2>Prompt tạo kịch bản</h2>
-                  <p className="panel-meta">
-                    Mẫu crypto là placeholder — ô trống thì sao chép theo số tin / số vai.
-                  </p>
-                </div>
-              </div>
-              <span
-                className={`conv-status-chip${promptText.trim() ? ' conv-status-chip--edit' : ''}`}
-              >
-                {promptModeLabel}
-              </span>
-            </div>
-            <div className="conv-panel-body">
-              <div className="conv-prompt-controls">
-                <label className="field conv-prompt-control">
-                  <span>Số tin</span>
-                  <input
-                    className="conv-input"
-                    type="number"
-                    min={1}
-                    max={500}
-                    value={promptMessageCount}
-                    onChange={(e) => setPromptMessageCount(Number(e.target.value || 120))}
-                  />
-                </label>
-                {mode === 'multi' ? (
-                  <label className="field conv-prompt-control">
-                    <span>Số vai</span>
-                    <input
-                      className="conv-input"
-                      type="number"
-                      min={2}
-                      max={10}
-                      value={promptSpeakerCount}
-                      onChange={(e) => {
-                        const count = Number(e.target.value || 4)
-                        setPromptSpeakerCount(count)
-                        syncMultiSpeakerCount(count)
-                      }}
-                    />
-                  </label>
-                ) : (
-                  <div className="field conv-prompt-control conv-prompt-control--fixed">
-                    <span>Số vai</span>
-                    <div className="conv-input conv-input--readonly" aria-readonly>
-                      2 (Person A, Person B)
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <section className="conv-prompt-analysis" aria-label="Phân tích prompt">
-                <div className="conv-prompt-analysis-head">
-                  <div>
-                    <p className="conv-prompt-analysis-title">Phân tích prompt</p>
-                    <p className="conv-prompt-analysis-sub">
-                      {mode === 'two'
-                        ? usesPromptPlaceholder
-                          ? 'Chế độ 2 vai — mẫu prompt tự dùng Person A & B.'
-                          : 'Chế độ 2 vai — prompt ghi đè vẫn đồng bộ về 2 người khi sao chép.'
-                        : usesPromptPlaceholder
-                          ? 'Đang dùng mẫu crypto — số tin / số vai cập nhật tự động khi bạn đổi ô trên.'
-                          : 'Đã ghi đè — số tin / số vai vẫn được đồng bộ vào nội dung khi sao chép.'}
-                    </p>
-                  </div>
-                  <span
-                    className={`conv-status-chip${usesPromptPlaceholder ? '' : ' conv-status-chip--edit'}`}
-                  >
-                    {promptModeLabel}
-                  </span>
-                </div>
-
-                <div className="conv-prompt-analysis-grid">
-                  <article className="conv-analysis-card">
-                    <p className="conv-analysis-label">Số tin</p>
-                    <p className="conv-analysis-value">{promptAnalysis.messageCount}</p>
-                  </article>
-                  <article className="conv-analysis-card">
-                    <p className="conv-analysis-label">Số vai</p>
-                    <p className="conv-analysis-value">{promptAnalysis.speakerCount}</p>
-                  </article>
-                  <article className="conv-analysis-card">
-                    <p className="conv-analysis-label">Ký tự</p>
-                    <p className="conv-analysis-value">
-                      {promptAnalysis.charCount.toLocaleString('vi-VN')}
-                    </p>
-                  </article>
-                  <article className="conv-analysis-card">
-                    <p className="conv-analysis-label">Dòng</p>
-                    <p className="conv-analysis-value">{promptAnalysis.lineCount}</p>
-                  </article>
-                </div>
-
-                <div className="conv-prompt-analysis-tags">
-                  {promptAnalysis.usesWebSearch ? (
-                    <span className="conv-analysis-tag conv-analysis-tag--accent">Web search</span>
-                  ) : null}
-                  {promptAnalysis.hasReplyRules ? (
-                    <span className="conv-analysis-tag">reply_to</span>
-                  ) : null}
-                  {promptAnalysis.hasConsecutiveLimit ? (
-                    <span className="conv-analysis-tag">Tối đa 4 tin liên tiếp / vai</span>
-                  ) : null}
-                  <span className="conv-analysis-tag conv-analysis-tag--muted">
-                    {mode === 'two' ? '2 vai · Crypto' : 'Crypto'}
-                  </span>
-                </div>
-
-                <div className="conv-prompt-analysis-speakers">
-                  <p className="conv-field-label">Vai trong prompt</p>
-                  <div className="conv-speaker-tag-list">
-                    {promptAnalysis.speakerNames.map((name) => (
-                      <span className="conv-speaker-tag" key={name}>
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <details className="conv-prompt-analysis-detail">
-                  <summary>Format output GPT (mẫu)</summary>
-                  <pre className="conv-prompt-format-preview">{promptAnalysis.formatExamples}</pre>
-                </details>
-              </section>
-
-              <div className="conv-editor-shell conv-editor-shell--prompt">
-                <div className="conv-editor-toolbar">
-                  <span className="conv-editor-label">Nội dung prompt</span>
-                  <div className="conv-meta-row conv-meta-row--inline">
-                    <span className="conv-meta-pill">
-                      {effectivePrompt.length.toLocaleString('vi-VN')} ký tự
-                    </span>
-                    {promptText.trim() ? (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={resetCryptoPrompt}
-                      >
-                        Xóa ghi đè
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="conv-prompt-wrap conv-prompt-wrap--placeholder">
-                  <textarea
-                    className="conv-prompt"
-                    rows={12}
-                    value={promptText}
-                    onChange={(e) => setPromptText(e.target.value)}
-                    placeholder={promptPlaceholder}
-                    spellCheck={false}
-                  />
-                </div>
-              </div>
-
-              {!usesPromptPlaceholder ? (
-                <Alert
-                  type="info"
-                  compact
-                  message="Prompt đã ghi đè — thay đổi Số tin / Số vai sẽ cập nhật các chỗ tương ứng trong prompt khi sao chép."
-                />
-              ) : null}
-
-              <div className="conv-prompt-copy-actions">
-                <button
-                  type="button"
-                  className="btn btn--primary btn--block"
-                  onClick={() => void copyPrompt()}
-                >
-                  Sao chép prompt cho GPT
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel conv-panel conv-panel--telegram">
-            <div className="conv-panel-head">
-              <div className="conv-panel-head-main">
-                <ConvPanelIcon kind="telegram" />
-                <div>
-                  <p className="conv-panel-step">Bước 1 · Telegram</p>
-                  <h2>Cấu hình gửi</h2>
-                  <p className="panel-meta">Chọn nhóm, gán account cho từng vai và thiết lập delay.</p>
-                </div>
-              </div>
-              <span className="conv-status-chip conv-status-chip--neutral">
-                {effectiveSpeakerCount} vai
-              </span>
-            </div>
-            <div className="conv-panel-body">
-              <label className="field">
-                <span>Link / Username nhóm</span>
-                <input
-                  className="conv-input"
-                  value={groupLink}
-                  onChange={(e) => setGroupLink(e.target.value)}
-                  placeholder="https://t.me/group hoặc @username"
-                />
-              </label>
-
-              <Alert type="warning" message={speakerFormError ?? ''} compact />
-
-              <div className="conv-mode-box">
-                <span className="conv-field-label">Chế độ hội thoại</span>
-                <div className="conv-segment" role="group" aria-label="Chế độ hội thoại">
-                  <button
-                    type="button"
-                    className={`conv-segment-btn${mode === 'two' ? ' conv-segment-btn--active' : ''}`}
-                    onClick={() => setConversationMode('two')}
-                  >
-                    2 vai
-                  </button>
-                  <button
-                    type="button"
-                    className={`conv-segment-btn${mode === 'multi' ? ' conv-segment-btn--active' : ''}`}
-                    onClick={() => setConversationMode('multi')}
-                  >
-                    Nhiều vai
-                  </button>
-                </div>
-                <p className="conv-muted">
-                  {mode === 'multi'
-                    ? 'Map từng Person A/B/C... với một account.'
-                    : 'Mặc định 2 tài khoản. Bật nhiều vai khi cần nhóm đông hơn.'}
-                </p>
-              </div>
-
-              {mode === 'multi' ? (
-                <div className="conv-hint-card conv-hint-card--info">
-                  <span className="conv-hint-card-icon" aria-hidden>
-                    ℹ
-                  </span>
-                  <p>
-                    {multiSpeakers.length} vai — đồng bộ hai chiều với ô Prompt. Mỗi account chỉ
-                    hiện ở một vai.
-                  </p>
-                </div>
-              ) : null}
-
-              {mode === 'two' ? (
-                <div className="conv-two-speakers">
-                  {[
-                    { title: 'Vai A', badge: 'A', speaker: speakerA, setSpeaker: setSpeakerA, phone: phoneA, setPhone: setPhoneA },
-                    { title: 'Vai B', badge: 'B', speaker: speakerB, setSpeaker: setSpeakerB, phone: phoneB, setPhone: setPhoneB },
-                  ].map((item) => (
-                    <div className="conv-speaker-card" key={item.title}>
-                      <div className="conv-speaker-badge" aria-hidden>
-                        {item.badge}
-                      </div>
-                      <div className="conv-speaker-fields">
-                        <div className="conv-section-title">{item.title}</div>
-                        <div className="conv-inline-grid">
-                          <label className="field">
-                            <span>Tên vai nói</span>
-                            <input
-                              className="conv-input"
-                              value={item.speaker}
-                              onChange={(e) => item.setSpeaker(e.target.value)}
-                            />
-                          </label>
-                          <label className="field">
-                            <span>Tài khoản</span>
-                            <select
-                              className="conv-input"
-                              value={item.phone}
-                              onChange={(e) => item.setPhone(e.target.value)}
-                            >
-                              <option value="">Chọn tài khoản</option>
-                              {accountOptionsForRow(
-                                item.phone,
-                                item.title === 'Vai A' ? [phoneB] : [phoneA],
-                              ).map((phone) => (
-                                <option key={phone} value={phone}>
-                                  {getPickerLabel(phone)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="conv-multi-map">
-                  <div className="conv-section-title">Danh sách vai nói</div>
-                  <div className="conv-multi-list">
-                    {multiSpeakers.map((row, index) => (
-                      <div className="conv-speaker-card conv-speaker-card--multi" key={`${row.speaker}-${index}`}>
-                        <div className="conv-speaker-badge" aria-hidden>
-                          {speakerBadgeLabel(row.speaker)}
-                        </div>
-                        <div className="conv-speaker-fields">
-                          <div className="conv-inline-grid conv-inline-grid--3">
-                            <label className="field">
-                              <span>Tên vai</span>
-                              <input
-                                className="conv-input"
-                                value={row.speaker}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  setMultiSpeakers((prev) =>
-                                    prev.map((item, i) =>
-                                      i === index ? { ...item, speaker: value } : item,
-                                    ),
-                                  )
-                                }}
-                              />
-                            </label>
-                            <label className="field">
-                              <span>Tài khoản</span>
-                              <select
-                                className="conv-input"
-                                value={row.phone}
-                                onChange={(e) => {
-                                  const value = e.target.value
-                                  setMultiSpeakers((prev) =>
-                                    prev.map((item, i) =>
-                                      i === index ? { ...item, phone: value } : item,
-                                    ),
-                                  )
-                                }}
-                              >
-                                <option value="">Chọn tài khoản</option>
-                                {accountOptionsForRow(
-                                  row.phone,
-                                  multiSpeakers
-                                    .filter((_, i) => i !== index)
-                                    .map((item) => item.phone),
-                                ).map((phone) => (
-                                  <option key={phone} value={phone}>
-                                    {getPickerLabel(phone)}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                            <div className="conv-multi-actions">
-                              <button
-                                type="button"
-                                className="btn btn--danger btn--sm"
-                                disabled={multiSpeakers.length <= 2}
-                                onClick={() => removeMultiSpeaker(index)}
-                              >
-                                Xóa
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="conv-toolbar">
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      disabled={multiSpeakers.length >= 10}
-                      onClick={addMultiSpeaker}
-                    >
-                      + Thêm vai nói
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn--ghost btn--sm"
-                      onClick={handleDetectSpeakers}
-                    >
-                      Tự nhận diện từ nội dung
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              <div className="conv-delay-box">
-                <div className="conv-switch-row">
-                  <div>
-                    <div className="conv-section-title">Delay tự động</div>
-                    <div className="conv-muted">Nghỉ ngẫu nhiên giữa từng câu.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="conv-toggle"
-                    checked={enableDelay}
-                    onChange={(e) => setEnableDelay(e.target.checked)}
-                  />
-                </div>
-                <div className="conv-range-row">
-                  <input
-                    className="conv-input conv-delay-input"
-                    type="number"
-                    min={0}
-                    value={timing.delay_min_sec}
-                    disabled={!enableDelay}
-                    onChange={(e) =>
-                      setTiming((prev) => ({
-                        ...prev,
-                        delay_min_sec: Number(e.target.value || 0),
-                      }))
-                    }
-                  />
-                  <span className="conv-muted">đến</span>
-                  <input
-                    className="conv-input conv-delay-input"
-                    type="number"
-                    min={0}
-                    value={timing.delay_max_sec}
-                    disabled={!enableDelay}
-                    onChange={(e) =>
-                      setTiming((prev) => ({
-                        ...prev,
-                        delay_max_sec: Number(e.target.value || 0),
-                      }))
-                    }
-                  />
-                  <span className="conv-muted">giây</span>
-                </div>
-              </div>
-
-              <div className="conv-delay-box">
-                <div className="conv-switch-row">
-                  <div>
-                    <div className="conv-section-title">Delay khi đổi vai</div>
-                    <div className="conv-muted">Khi chuyển từ vai này sang vai khác.</div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    className="conv-toggle"
-                    checked={enableSpeakerDelay}
-                    onChange={(e) => setEnableSpeakerDelay(e.target.checked)}
-                  />
-                </div>
-                <div className="conv-range-row">
-                  <input
-                    className="conv-input conv-delay-input"
-                    type="number"
-                    min={0}
-                    value={timing.speaker_change_delay_min_sec}
-                    disabled={!enableSpeakerDelay}
-                    onChange={(e) =>
-                      setTiming((prev) => ({
-                        ...prev,
-                        speaker_change_delay_min_sec: Number(e.target.value || 0),
-                      }))
-                    }
-                  />
-                  <span className="conv-muted">đến</span>
-                  <input
-                    className="conv-input conv-delay-input"
-                    type="number"
-                    min={0}
-                    value={timing.speaker_change_delay_max_sec}
-                    disabled={!enableSpeakerDelay}
-                    onChange={(e) =>
-                      setTiming((prev) => ({
-                        ...prev,
-                        speaker_change_delay_max_sec: Number(e.target.value || 0),
-                      }))
-                    }
-                  />
-                  <span className="conv-muted">giây</span>
-                </div>
-              </div>
-
-              <div className="conv-options-box">
-                <label className="conv-check-row">
-                  <input
-                    type="checkbox"
-                    className="conv-toggle"
-                    checked={replyOnSpeakerChange}
-                    onChange={(e) => setReplyOnSpeakerChange(e.target.checked)}
-                  />
-                  <span>
-                    Câu đầu của vai mới reply câu cuối của vai trước
-                    <span className="conv-muted conv-check-hint">
-                      {' '}
-                      — bỏ qua nếu kịch bản đã có <code>reply_to</code>
-                    </span>
-                  </span>
-                </label>
-                <label className="conv-check-row">
-                  <input
-                    type="checkbox"
-                    className="conv-toggle"
-                    checked={continueOnError}
-                    onChange={(e) => setContinueOnError(e.target.checked)}
-                  />
-                  <span>
-                    Một câu lỗi vẫn chạy tiếp
-                    <span className="conv-muted conv-check-hint">
-                      {' '}
-                      — tắt = dừng job, dùng Retry / Resume
-                    </span>
-                  </span>
-                </label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="conv-col conv-col--right">
-          <div className="panel conv-panel conv-panel--script">
-            <div className="conv-panel-head">
-              <div className="conv-panel-head-main">
-                <ConvPanelIcon kind="script" />
-                <div>
-                  <p className="conv-panel-step">Bước 2 · Kịch bản</p>
-                  <h2>Nội dung hội thoại</h2>
-                  <p className="panel-meta">
-                    Dán output GPT — định dạng <code>#1 Person A: ...</code> hoặc Round / Person A.
-                  </p>
-                </div>
-              </div>
-              <span
-                className={`conv-status-chip${scriptText.trim() ? ' conv-status-chip--edit' : ''}`}
-              >
-                {scriptModeLabel}
-              </span>
-            </div>
-            <div className="conv-panel-body">
-              <div className="conv-editor-shell">
-                <div className="conv-editor-toolbar">
-                  <span className="conv-editor-label">Kịch bản</span>
-                  <div className="conv-meta-row conv-meta-row--inline">
-                    <span className="conv-meta-pill">
-                      {(scriptText.trim() ? scriptText : CONVERSATION_TEMPLATE).length.toLocaleString(
-                        'vi-VN',
-                      )}{' '}
-                      ký tự
-                    </span>
-                    {scriptText.trim() ? (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm"
-                        onClick={clearScriptOverride}
-                      >
-                        Xóa nội dung đã dán
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="conv-script-wrap conv-script-wrap--placeholder">
-                  <textarea
-                    className="conv-script"
-                    rows={13}
-                    value={scriptText}
-                    onChange={(e) => setScriptText(e.target.value)}
-                    placeholder={CONVERSATION_TEMPLATE}
-                    spellCheck={false}
-                  />
-                </div>
-              </div>
-              <div className="conv-action-bar">
-                <div className="conv-action-group conv-action-group--primary">
-                  <button
-                    type="button"
-                    className="btn btn--primary btn--sm"
-                    disabled={busy || sessionsLoading || Boolean(speakerFormError)}
-                    onClick={() => void handleParse()}
-                  >
-                    Tách nội dung
-                  </button>
-                </div>
-                <div className="conv-action-group">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={() => void copyMessagesOnly()}
-                  >
-                    Sao chép nội dung tin
-                  </button>
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={resetProgress}>
-                    Làm lại
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel conv-panel conv-panel--preview">
-            <div className="conv-panel-head">
-              <div className="conv-panel-head-main">
-                <ConvPanelIcon kind="preview" />
-                <div>
-                  <p className="conv-panel-step">Bước 2 · Xem trước</p>
-                  <h2>Xem trước &amp; gửi</h2>
-                  <p className="panel-meta">Kiểm tra từng dòng, chọn dòng bắt đầu và chạy tác vụ.</p>
-                </div>
-              </div>
-              {preview?.line_count ? (
-                <span className="conv-status-chip conv-status-chip--success">
-                  {preview.line_count} dòng
-                </span>
-              ) : null}
-            </div>
-            <div className="conv-panel-body">
-              {parseIssues.length ? (
-                <div className="conv-alert-list">
-                  <p className="conv-field-label">Kết quả kiểm tra</p>
-                  {parseErrors.map((item) => (
-                    <Alert
-                      key={`${item.code}-${item.line_id ?? item.message}`}
-                      type="error"
-                      compact
-                      message={item.message}
-                      disabled={!item.line_id}
-                      onClick={
-                        item.line_id ? () => focusIssueLine(item.line_id) : undefined
-                      }
-                    />
-                  ))}
-                  {parseWarnings.map((item) => (
-                    <Alert
-                      key={`${item.code}-${item.line_id ?? item.message}`}
-                      type="warning"
-                      compact
-                      message={item.message}
-                      disabled={!item.line_id}
-                      onClick={
-                        item.line_id ? () => focusIssueLine(item.line_id) : undefined
-                      }
-                    />
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="conv-current">
-                {activeLine ? (
-                  <div className="conv-current-bubble">
-                    <div className="conv-current-meta">
-                      <span className="conv-pill">id {activeLine.lineId}</span>
-                      <span className="conv-pill">GPT #{activeLine.scriptRef}</span>
-                      {activeLine.round ? (
-                        <span className="conv-pill">Round {activeLine.round}</span>
-                      ) : null}
-                      <span className="conv-pill conv-pill--accent">{activeLine.speakerLabel}</span>
-                      <span className={statusBadgeClass(activeLine.status)}>
-                        {lineStatusLabel(activeLine.status)}
-                      </span>
-                    </div>
-                    <p className="conv-current-message">{activeLine.message}</p>
-                  </div>
-                ) : (
-                  <div className="conv-current-empty">
-                    <ConvEmptyChatIcon />
-                    <p>Chưa có dòng nào. Bấm <strong>Tách nội dung</strong>.</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="conv-action-bar conv-action-bar--run">
-                <div className="conv-action-group conv-action-group--primary">
-                  <button
-                    type="button"
-                    className="btn btn--primary btn--sm"
-                    disabled={Boolean(runBlockReason)}
-                    title={runBlockReason || undefined}
-                    onClick={() => void handleRun(true)}
-                  >
-                    Chạy từ đầu
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    disabled={Boolean(runBlockReason)}
-                    title={runBlockReason || undefined}
-                    onClick={() => void handleRun(false)}
-                  >
-                    Chạy từ dòng đang chọn
-                  </button>
-                </div>
-                <div className="conv-action-group">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    disabled={!canResume}
-                    title={resumeBlockReason || undefined}
-                    onClick={() => void handleResume()}
-                  >
-                    Resume
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm"
-                    disabled={busy || !canRetryLine}
-                    title={retryBlockReason || undefined}
-                    onClick={() => void handleRetryLine()}
-                  >
-                    Retry dòng chọn
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn--danger btn--sm"
-                    disabled={Boolean(stopBlockReason)}
-                    title={stopBlockReason || undefined}
-                    onClick={() => void handleStop()}
-                  >
-                    Dừng
-                  </button>
-                </div>
-              </div>
-              {runBlockReason ? (
-                <Alert type="warning" compact message={runBlockReason} />
-              ) : null}
-
-              <div className="conv-preview-filters">
-                <span className="conv-field-label">Lọc bảng</span>
-                <div className="conv-segment" role="group" aria-label="Lọc bảng xem trước">
-                  {(
-                    [
-                      ['all', 'Tất cả'],
-                      ['error', 'Lỗi'],
-                      ['pending', 'Chưa gửi'],
-                    ] as const
-                  ).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`conv-segment-btn${previewFilter === value ? ' conv-segment-btn--active' : ''}`}
-                      onClick={() => setPreviewFilter(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div
-                className="conv-preview-wrap table-wrap"
-                id="conversationPreviewScroll"
-                ref={previewScrollRef}
-              >
-                <table className="data-table conv-preview-table">
-                  <thead>
-                    <tr>
-                      <th>id</th>
-                      <th>GPT #</th>
-                      <th>Lượt</th>
-                      <th>Vai nói</th>
-                      <th>Tài khoản</th>
-                      <th>Nội dung</th>
-                      <th>Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredPreviewLines.map((line) => (
-                      <tr
-                        key={line.lineId}
-                        data-line-id={line.lineId}
-                        className={rowClass(line, activeLine?.lineId ?? 0)}
-                        onClick={() => setActiveLineId(line.lineId)}
-                      >
-                        <td className="mono">{line.lineId}</td>
-                        <td className="mono muted">{line.scriptRef}</td>
-                        <td>{line.round || '—'}</td>
-                        <td>{line.speakerLabel}</td>
-                        <td className="phone">{line.phone || '—'}</td>
-                        <td className="conv-table-message">{line.message}</td>
-                        <td>
-                          <span className={statusBadgeClass(line.status)} title={line.status}>
-                            {lineStatusLabel(line.status)}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                    {!previewLines.length ? (
-                      <tr>
-                        <td colSpan={7} className="conv-empty-cell muted">
-                          Chưa parse nội dung.
-                        </td>
-                      </tr>
-                    ) : !filteredPreviewLines.length ? (
-                      <tr>
-                        <td colSpan={7} className="conv-empty-cell muted">
-                          Không có dòng nào khớp bộ lọc.
-                        </td>
-                      </tr>
-                    ) : null}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          <div className="panel conv-panel conv-panel--job">
-            <div className="conv-panel-head">
-              <div className="conv-panel-head-main">
-                <ConvPanelIcon kind="job" />
-                <div>
-                  <p className="conv-panel-step">Bước 3 · Tiến độ</p>
-                  <h2>Thông báo tác vụ</h2>
-                  <p className="panel-meta">Theo dõi tiến độ, resume / retry và lịch sử job.</p>
-                </div>
-              </div>
-              {job ? (
-                <span className={statusBadgeClass(job.status)} title={job.status}>
-                  {jobStatusLabel(job.status)}
-                </span>
-              ) : (
-                <span className="conv-status-chip conv-status-chip--neutral">Chưa chạy</span>
-              )}
-            </div>
-            <div className="conv-panel-body conv-task-log">
-              {jobHistory.length ? (
-                <div className="conv-job-history">
-                  <p className="conv-field-label">Lịch sử gần đây</p>
-                  <ul className="conv-job-history-list">
-                    {jobHistory.map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          className={`conv-job-history-btn${job?.id === item.id ? ' conv-job-history-btn--active' : ''}`}
-                          onClick={() => void handleLoadJob(item.id)}
-                        >
-                          <span className="conv-job-history-main">
-                            <span className="mono">#{item.id}</span>
-                            <span className={statusBadgeClass(item.status)} title={item.status}>
-                              {jobStatusLabel(item.status)}
-                            </span>
-                            <span className="conv-muted">
-                              {item.completed_lines}/{item.total_lines}
-                            </span>
-                          </span>
-                          <span className="conv-job-history-meta">
-                            <span className="conv-muted">{formatJobTime(item.created_at)}</span>
-                            <span className="conv-job-history-group" title={item.group_link}>
-                              {shortenGroupLink(item.group_link)}
-                            </span>
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-              {!job ? (
-                <div className="conv-empty-job">
-                  <ConvEmptyChatIcon />
-                  <p>Chưa có tác vụ nào. Tách kịch bản rồi bấm <strong>Chạy từ đầu</strong>.</p>
-                </div>
-              ) : (
-                <>
-                  <div className="conv-progress-head">
-                    <span className="conv-progress-label">
-                      Tiến độ <strong>{job.completed_lines}</strong> / {job.total_lines}
-                    </span>
-                    <span className="conv-progress-pct">{jobPercent}%</span>
-                  </div>
-                  <div className="conv-progress-bar" aria-hidden>
-                    <div
-                      className={`conv-progress-bar-fill${job.error_lines > 0 ? ' conv-progress-bar-fill--error' : ''}`}
-                      style={{ width: `${jobPercent}%` }}
-                    />
-                  </div>
-                  <div className="conv-job-summary">
-                    <span className="conv-job-stat conv-job-stat--ok">
-                      {job.success_lines} đã gửi
-                    </span>
-                    <span className="conv-job-stat conv-job-stat--pending">
-                      {pendingLineCount} chờ
-                    </span>
-                    <span className="conv-job-stat conv-job-stat--err">
-                      {job.error_lines} lỗi
-                    </span>
-                  </div>
-                  <ul className="conv-task-list">
-                    {[...job.line_results]
-                      .sort((a, b) => a.line_id - b.line_id)
-                      .map((item) => (
-                        <li
-                          key={item.line_id}
-                          className={`conv-task-item${item.status === 'pending' ? ' conv-task-item--pending' : ''}`}
-                        >
-                          <span className="conv-task-line mono">#{item.line_id}</span>
-                          <span className="phone conv-task-phone">{item.phone || '—'}</span>
-                          <span className={statusBadgeClass(item.status)} title={item.status}>
-                            {lineStatusLabel(item.status)}
-                          </span>
-                          <span className="conv-muted conv-task-detail">
-                            {item.detail ||
-                              (item.status === 'pending' ? 'Chưa gửi' : '')}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <ConversationPageView
+      error={error}
+      success={success}
+      info={info}
+      setError={setError}
+      setSuccess={setSuccess}
+      setInfo={setInfo}
+      sessions={sessions}
+      sessionsLoading={sessionsLoading}
+      busy={busy}
+      loadSessions={() => void loadSessions()}
+      currentStep={currentStep}
+      promptMessageCount={promptMessageCount}
+      preview={preview}
+      sessionsCount={sessions.length}
+      jobProgress={jobProgress}
+      groupLink={groupLink}
+      promptText={promptText}
+      promptModeLabel={promptModeLabel}
+      scriptModeLabel={scriptModeLabel}
+      scriptSpeakersDetected={scriptSpeakersDetected}
+      scriptSpeakersMissing={scriptSpeakersMissing}
+      effectiveSpeakerCount={effectiveSpeakerCount}
+      promptPlaceholder={promptPlaceholder}
+      effectivePrompt={effectivePrompt}
+      promptSpeakerCount={promptSpeakerCount}
+      speakerFormError={speakerFormError}
+      multiSpeakers={multiSpeakers}
+      scriptText={scriptText}
+      timing={timing}
+      enableDelay={enableDelay}
+      enableSpeakerDelay={enableSpeakerDelay}
+      enableTypingDelay={enableTypingDelay}
+      continueOnError={continueOnError}
+      previewFilter={previewFilter}
+      previewLines={previewLines}
+      filteredPreviewLines={filteredPreviewLines}
+      activeLine={activeLine}
+      job={job}
+      jobHistory={jobHistory}
+      jobPercent={jobPercent}
+      pendingLineCount={pendingLineCount}
+      parseErrors={parseErrors}
+      parseWarnings={parseWarnings}
+      parseErrorSummaries={parseErrorSummaries}
+      parseWarningSummaries={parseWarningSummaries}
+      runBlockReason={runBlockReason}
+      runFromLineBlockReason={runFromLineBlockReason}
+      resumeBlockReason={resumeBlockReason}
+      retryBlockReason={retryBlockReason}
+      stopBlockReason={stopBlockReason}
+      canResume={canResume}
+      canRetryLine={canRetryLine}
+      previewScrollRef={previewScrollRef}
+      setGroupLink={setGroupLink}
+      setPromptMessageCount={setPromptMessageCount}
+      setPromptSpeakerCount={setPromptSpeakerCount}
+      setPromptText={setPromptText}
+      setScriptText={setScriptText}
+      setMultiSpeakers={setMultiSpeakers}
+      setEnableDelay={setEnableDelay}
+      setEnableSpeakerDelay={setEnableSpeakerDelay}
+      setEnableTypingDelay={setEnableTypingDelay}
+      setContinueOnError={setContinueOnError}
+      setTiming={setTiming}
+      setPreviewFilter={setPreviewFilter}
+      setActiveLineId={setActiveLineId}
+      syncMultiSpeakerCount={syncMultiSpeakerCount}
+      resetCryptoPrompt={resetCryptoPrompt}
+      clearScriptOverride={clearScriptOverride}
+      copyPrompt={() => void copyPrompt()}
+      getPickerLabel={getPickerLabel}
+      getMeta={getMeta}
+      accountOptionsForRow={accountOptionsForRow}
+      handleParse={() => void handleParse()}
+      handleRun={(fromStart) => void handleRun(fromStart)}
+      handleResume={() => void handleResume()}
+      handleRetryLine={() => void handleRetryLine()}
+      handleStop={() => void handleStop()}
+      handleLoadJob={(id) => void handleLoadJob(id)}
+      handleDetectSpeakers={handleDetectSpeakers}
+      addMultiSpeaker={addMultiSpeaker}
+      removeMultiSpeaker={removeMultiSpeaker}
+      copyMessagesOnly={() => void copyMessagesOnly()}
+      resetProgress={resetProgress}
+      focusIssueLine={focusIssueLine}
+      rowClass={rowClass}
+      statusBadgeClass={statusBadgeClass}
+      lineStatusLabel={lineStatusLabel}
+      jobStatusLabel={jobStatusLabel}
+      speakerBadgeLabel={speakerBadgeLabel}
+      formatJobTime={formatJobTime}
+      shortenGroupLink={shortenGroupLink}
+    />
   )
 }

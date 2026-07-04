@@ -9,6 +9,8 @@ export interface ConversationTiming {
   delay_max_sec: number
   speaker_change_delay_min_sec: number
   speaker_change_delay_max_sec: number
+  typing_min_sec: number
+  typing_max_sec: number
 }
 
 export interface ConversationLine {
@@ -35,6 +37,8 @@ export const DEFAULT_CONVERSATION_TIMING: ConversationTiming = {
   delay_max_sec: 12,
   speaker_change_delay_min_sec: 15,
   speaker_change_delay_max_sec: 30,
+  typing_min_sec: 2,
+  typing_max_sec: 6,
 }
 
 export const CONVERSATION_TEMPLATE = `Round 1
@@ -119,21 +123,83 @@ export function detectSpeakersFromScript(scriptText: string): string[] {
   return speakers
 }
 
-export function speakersForApi(options: {
-  mode: ConversationMode
-  speakerA: string
-  speakerB: string
-  phoneA: string
-  phoneB: string
-  multiSpeakers: MultiSpeakerRow[]
-}): ConversationSpeaker[] {
-  if (options.mode === 'two') {
-    return [
-      { id: 'a', label: options.speakerA.trim() || 'Person A', phone: options.phoneA },
-      { id: 'b', label: options.speakerB.trim() || 'Person B', phone: options.phoneB },
-    ]
+export function configuredSpeakerKeys(speakers: ConversationSpeaker[]): Set<string> {
+  return new Set(speakers.map((item) => normalizeSpeakerName(item.label)))
+}
+
+export function speakersMissingFromConfig(
+  scriptText: string,
+  speakers: ConversationSpeaker[],
+): string[] {
+  const configured = configuredSpeakerKeys(speakers)
+  return detectSpeakersFromScript(scriptText).filter(
+    (name) => !configured.has(normalizeSpeakerName(name)),
+  )
+}
+
+export function buildMultiSpeakersFromDetected(
+  detected: string[],
+  previous: MultiSpeakerRow[],
+  sessions: string[],
+): MultiSpeakerRow[] {
+  const previousMap = new Map(
+    previous.map((row) => [normalizeSpeakerName(row.speaker), row.phone]),
+  )
+  const usedPhones: string[] = []
+  return detected.map((speaker) => {
+    const kept = previousMap.get(normalizeSpeakerName(speaker))?.trim() ?? ''
+    const phone =
+      kept && !usedPhones.includes(kept)
+        ? kept
+        : pickUnusedPhoneFromList(sessions, usedPhones)
+    if (phone) usedPhones.push(phone)
+    return { speaker, phone }
+  })
+}
+
+export interface SummarizedParseIssue {
+  message: string
+  line_id?: number | null
+}
+
+export function summarizeParseIssues(issues: ConversationValidationIssue[]): SummarizedParseIssue[] {
+  const skippedBySpeaker = new Map<string, { count: number; firstLineId?: number | null }>()
+  const other: ConversationValidationIssue[] = []
+
+  for (const item of issues) {
+    if (item.code === 'skipped_line' && item.message.includes('khong nhan dien duoc vai')) {
+      const match = item.message.match(/\(([^)]+)\)/)
+      const speaker = match?.[1]?.trim() || '?'
+      const entry = skippedBySpeaker.get(speaker) ?? { count: 0, firstLineId: item.line_id }
+      entry.count += 1
+      if (entry.firstLineId == null && item.line_id != null) {
+        entry.firstLineId = item.line_id
+      }
+      skippedBySpeaker.set(speaker, entry)
+      continue
+    }
+    other.push(item)
   }
-  return options.multiSpeakers
+
+  const lines: SummarizedParseIssue[] = []
+  for (const [speaker, entry] of skippedBySpeaker) {
+    lines.push({
+      message: `${entry.count} dòng bị bỏ qua — vai "${speaker}" chưa được cấu hình (bấm Tách nội dung để tự nhận diện)`,
+      line_id: entry.firstLineId,
+    })
+  }
+  for (const item of other) {
+    lines.push({ message: item.message, line_id: item.line_id })
+  }
+  return lines
+}
+
+export function summarizeParseIssueMessages(issues: ConversationValidationIssue[]): string[] {
+  return summarizeParseIssues(issues).map((item) => item.message)
+}
+
+export function speakersForApi(multiSpeakers: MultiSpeakerRow[]): ConversationSpeaker[] {
+  return multiSpeakers
     .filter((row) => row.speaker.trim())
     .map((row, index) => ({
       id: String.fromCharCode(97 + index),
@@ -237,7 +303,6 @@ export function buildScriptPayload(
   scriptText: string,
   options: {
     timing?: ConversationTiming
-    replyOnSpeakerChange?: boolean
     continueOnError?: boolean
   } = {},
 ): ConversationParseRequestPayload {
@@ -246,7 +311,7 @@ export function buildScriptPayload(
     group_link: groupLink.trim(),
     speakers,
     timing: options.timing ?? DEFAULT_CONVERSATION_TIMING,
-    reply_on_speaker_change: options.replyOnSpeakerChange ?? true,
+    reply_on_speaker_change: false,
     continue_on_error: options.continueOnError ?? false,
   }
 }
@@ -333,17 +398,243 @@ export function speakerConfigError(speakers: ConversationSpeaker[]): string | nu
 
 export type ConversationLineStatus = ConversationLineResult['status']
 
+export type PreviewLinePhase = 'todo' | 'live' | 'done' | 'skip' | 'fail'
+
+export function previewLinePhase(status: ConversationLineStatus | string): PreviewLinePhase {
+  if (status === 'success') return 'done'
+  if (status === 'skipped') return 'skip'
+  if (status === 'error') return 'fail'
+  if (status === 'running') return 'live'
+  return 'todo'
+}
+
+export function isActionablePreviewLine(status: ConversationLineStatus | string): boolean {
+  return status === 'pending' || status === 'running' || status === 'error'
+}
+
+export function summarizePreviewLineStats(lines: ConversationPreviewLine[]) {
+  const stats = {
+    total: lines.length,
+    todo: 0,
+    live: 0,
+    done: 0,
+    skip: 0,
+    fail: 0,
+    actionable: 0,
+  }
+  for (const line of lines) {
+    const phase = previewLinePhase(line.status)
+    if (phase === 'todo') stats.todo += 1
+    else if (phase === 'live') stats.live += 1
+    else if (phase === 'done') stats.done += 1
+    else if (phase === 'skip') stats.skip += 1
+    else if (phase === 'fail') stats.fail += 1
+  }
+  stats.actionable = stats.todo + stats.live + stats.fail
+  return stats
+}
+
 export function lineStatusLabel(status: ConversationLineStatus | string): string {
   const map: Record<string, string> = {
     pending: 'chờ',
     running: 'đang gửi',
     success: 'đã gửi',
     error: 'lỗi',
-    skipped: 'bỏ qua',
+    skipped: 'không chạy',
     done: 'hoàn thành',
     stopped: 'đã dừng',
   }
   return map[status] ?? status
+}
+
+export interface DeckLogEntry {
+  lineId: number
+  speakerLabel: string
+  phone: string
+  message: string
+  status: ConversationLineStatus
+  detail: string
+  messageId?: number | null
+  replyToMsgId?: number | null
+  replyToLineId?: number | null
+}
+
+const GENERIC_DECK_DETAILS = new Set([
+  '',
+  'da gui',
+  'da gui tin nhan',
+  'da gui truoc',
+  'da tra loi tin nhan',
+  'dang gui...',
+  'dang gui',
+  'gui that bai',
+  'khong gui duoc',
+])
+
+function normalizeDeckDetail(detail: string): string {
+  return detail.trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function isGenericDeckDetail(detail: string): boolean {
+  const normalized = normalizeDeckDetail(detail)
+  if (GENERIC_DECK_DETAILS.has(normalized)) return true
+  return /^dang go \(\d+s\)\.{0,3}$/.test(normalized)
+}
+
+function humanizeDeckDetailPart(part: string): string {
+  const normalized = normalizeDeckDetail(part)
+  const map: Record<string, string> = {
+    'da gui': 'Đã gửi',
+    'da gui tin nhan': 'Đã gửi tin nhắn',
+    'da gui truoc': 'Giữ từ job trước',
+    'da tra loi tin nhan': 'Đã trả lời tin nhắn',
+    'dang gui...': 'Đang gửi…',
+    'dang gui': 'Đang gửi…',
+    'gui that bai': 'Gửi thất bại',
+    'khong gui duoc': 'Không gửi được',
+    'khong tim thay vai': 'Không tìm thấy vai diễn',
+    'khong tim thay vai dien': 'Không tìm thấy vai diễn',
+    'giu tu job truoc': 'Giữ từ job trước',
+  }
+  if (map[normalized]) return map[normalized]
+  const typing = normalized.match(/^dang go \((\d+)s\)\.{0,3}$/)
+  if (typing) return `Đang gõ (${typing[1]}s)…`
+  const typed = normalized.match(/^go (\d+)s$/)
+  if (typed) return `Đã gõ ${typed[1]}s`
+  const waitDelay = normalized.match(/^cho delay \((\d+)s\) — (doi nguoi|cung nguoi)$/)
+  if (waitDelay) {
+    const kind = waitDelay[2] === 'doi nguoi' ? 'đổi người' : 'cùng người'
+    return `Chờ delay ${waitDelay[1]}s · ${kind}`
+  }
+  const skipFrom = normalized.match(/^bo qua — chay tu dong #(\d+)$/)
+  if (skipFrom) return `Bỏ qua — chạy từ dòng #${skipFrom[1]}`
+  if (normalized === 'bo qua') return 'Bỏ qua — không nằm trong lượt chạy'
+  const replyLine = normalized.match(/^tra loi dong #(\d+)$/)
+  if (replyLine) return `Trả lời dòng #${replyLine[1]}`
+  const tgMsg = normalized.match(/^tg #(\d+)$/)
+  if (tgMsg) return `TG #${tgMsg[1]}`
+  const replyTg = normalized.match(/^reply tg #(\d+)$/)
+  if (replyTg) return `Reply TG #${replyTg[1]}`
+  return part.trim()
+}
+
+function humanizeDeckDetail(detail: string): string {
+  if (!detail.includes('·')) {
+    return humanizeDeckDetailPart(detail)
+  }
+  return detail
+    .split('·')
+    .map((part) => humanizeDeckDetailPart(part))
+    .filter(Boolean)
+    .join(' · ')
+}
+
+function deckDetailIsRich(detail: string): boolean {
+  const normalized = normalizeDeckDetail(detail)
+  if (!detail.trim() || isGenericDeckDetail(detail)) return false
+  return (
+    detail.includes('·') ||
+    normalized.includes('tg #') ||
+    normalized.includes('tra loi dong #') ||
+    normalized.includes('reply tg #') ||
+    normalized.includes('giu tu job truoc') ||
+    normalized.includes('bo qua —') ||
+    normalized.includes('cho delay (') ||
+    normalized.includes('go ')
+  )
+}
+
+export function deckLogShowMeta(entry: DeckLogEntry): boolean {
+  if (entry.status === 'error' || entry.status === 'running') return true
+  const detail = (entry.detail || '').trim()
+  if (!detail) return false
+  const normalized = detail.toLowerCase()
+  if (entry.status === 'pending' && normalized.includes('cho delay')) return true
+  if (entry.status === 'success' && normalized.includes('go ')) return true
+  return (
+    normalized.includes('flood') ||
+    normalized.includes('dang go') ||
+    normalized.includes('khong tim thay') ||
+    normalized.includes('khong gui')
+  )
+}
+
+export function formatDeckLogMeta(entry: DeckLogEntry): string {
+  const parts: string[] = []
+  const detail = entry.detail?.trim() ?? ''
+  const normalizedDetail = normalizeDeckDetail(detail)
+
+  if (entry.phone) {
+    parts.push(entry.phone)
+  }
+
+  const detailHasReplyLine =
+    entry.replyToLineId != null &&
+    normalizedDetail.includes(`tra loi dong #${entry.replyToLineId}`)
+  const detailHasReplyMsg =
+    entry.replyToMsgId != null &&
+    normalizedDetail.includes(`reply tg #${entry.replyToMsgId}`)
+
+  if (entry.replyToLineId != null && !detailHasReplyLine) {
+    parts.push(`Trả lời #${entry.replyToLineId}`)
+  } else if (
+    entry.replyToMsgId != null &&
+    entry.status !== 'pending' &&
+    !detailHasReplyMsg &&
+    !detailHasReplyLine
+  ) {
+    parts.push(`Reply TG #${entry.replyToMsgId}`)
+  }
+
+  if (entry.status === 'success') {
+    if (deckDetailIsRich(detail)) {
+      parts.push(humanizeDeckDetail(detail))
+    } else {
+      if (entry.messageId != null) {
+        parts.push(`TG #${entry.messageId}`)
+      }
+      if (detail && !isGenericDeckDetail(detail)) {
+        parts.push(humanizeDeckDetail(detail))
+      } else {
+        parts.push('Đã gửi')
+      }
+    }
+    return parts.join(' · ')
+  }
+
+  if (entry.status === 'error') {
+    if (detail) {
+      parts.push(humanizeDeckDetail(detail))
+    } else {
+      parts.push('Gửi thất bại')
+    }
+    return parts.join(' · ')
+  }
+
+  if (entry.status === 'running') {
+    parts.push(detail ? humanizeDeckDetail(detail) : 'Đang gửi…')
+    return parts.join(' · ')
+  }
+
+  if (entry.status === 'skipped') {
+    parts.push(detail ? humanizeDeckDetail(detail) : 'Không nằm trong lượt chạy')
+    return parts.join(' · ')
+  }
+
+  if (entry.status === 'pending') {
+    if (detail) {
+      parts.push(humanizeDeckDetail(detail))
+    } else {
+      parts.push('Chờ đến lượt')
+    }
+    return parts.join(' · ')
+  }
+
+  if (detail) {
+    parts.push(humanizeDeckDetail(detail))
+  }
+
+  return parts.join(' · ') || '—'
 }
 
 export function scriptTextFromJobScript(script: ConversationScript): string {
