@@ -1,9 +1,9 @@
-/* Audit page — aligned with Sessions / Tasks */
+/* Audit page — horizontal layout (stats + toolbar + table) */
 
 .page--audit {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .page--audit .page-header {
@@ -26,7 +26,7 @@
   flex-wrap: wrap;
 }
 
-/* Stats */
+/* Stats row */
 .audit-stats {
   margin-bottom: 0;
 }
@@ -178,7 +178,7 @@
   color: var(--accent);
 }
 
-/* Toolbar */
+/* Horizontal toolbar */
 .audit-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -452,7 +452,6 @@
   margin: 0;
 }
 
-/* Responsive */
 @media (max-width: 900px) {
   .audit-toolbar {
     flex-direction: column;

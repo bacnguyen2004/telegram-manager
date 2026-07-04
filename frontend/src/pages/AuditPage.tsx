@@ -181,8 +181,7 @@ export function AuditPage() {
         <div>
           <h1>Nhật ký hoạt động</h1>
           <p className="page-desc">
-            Login, session, join/leave và quét nhóm — ghi vào <code>audit_logs</code> khi PostgreSQL
-            bật.
+            Login, session, join/leave và quét nhóm — ghi vào PostgreSQL khi bật database.
           </p>
         </div>
         <div className="audit-page-actions">
@@ -191,7 +190,7 @@ export function AuditPage() {
           </Link>
           <button
             type="button"
-            className="btn btn--ghost"
+            className="btn btn--ghost btn--sm"
             onClick={() => {
               void loadOverview()
               void loadAudit()
@@ -203,7 +202,7 @@ export function AuditPage() {
         </div>
       </header>
 
-      <Alert type="error" message={error} />
+      <Alert type="error" message={error} onDismiss={() => setError('')} />
 
       <section className="stats-grid audit-stats">
         <article className="stat-card audit-stat-card">
