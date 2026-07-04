@@ -28,6 +28,7 @@ const CATEGORY_SHORT: Record<AuditCategory, string> = {
   auth: 'Auth',
   sessions: 'Session',
   groups: 'Nhóm',
+  conversation: 'Hội thoại',
 }
 
 function categoryFromParam(value: string | null): AuditCategory {

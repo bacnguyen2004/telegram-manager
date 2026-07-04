@@ -120,6 +120,10 @@
   border-color: color-mix(in srgb, var(--success) 30%, var(--border));
 }
 
+.audit-recent-chip--conversation {
+  border-color: color-mix(in srgb, #7c3aed 28%, var(--border));
+}
+
 .audit-recent-chip-action {
   font-size: 12px;
   font-weight: 700;
@@ -269,6 +273,12 @@
   color: var(--success);
 }
 
+.audit-filter-pill--conversation.audit-filter-pill--active {
+  border-color: color-mix(in srgb, #7c3aed 35%, var(--border));
+  background: color-mix(in srgb, #7c3aed 10%, var(--bg-elevated));
+  color: #7c3aed;
+}
+
 .audit-clear-btn {
   margin-left: auto;
 }
@@ -307,6 +317,10 @@
 
 .audit-row--groups td:first-child {
   box-shadow: inset 3px 0 0 color-mix(in srgb, var(--success) 50%, transparent);
+}
+
+.audit-row--conversation td:first-child {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #7c3aed 50%, transparent);
 }
 
 .audit-row--status-error:hover {
@@ -352,6 +366,10 @@
 
 .audit-action-tone--groups.audit-action-tag {
   color: var(--success);
+}
+
+.audit-action-tone--conversation.audit-action-tag {
+  color: #7c3aed;
 }
 
 .audit-resource {

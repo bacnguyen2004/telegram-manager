@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './SessionsPage.css'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { AddAccountModal } from '../components/AddAccountModal'
 import { Alert } from '../components/Alert'
@@ -738,86 +738,8 @@ export function SessionsPage() {
 
   return (
     <div className="page page--sessions">
-      <header className="page-header sessions-page-header">
-        <div>
-          <h1>Sessions</h1>
-          <p className="page-desc">
-            Quản lý file <code>.session</code>, kiểm tra trạng thái và đồng bộ metadata DB.
-          </p>
-        </div>
-        <div className="sessions-page-actions">
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={openAddAccount}
-            disabled={checking || showAddAccount}
-          >
-            Thêm tài khoản
-          </button>
-          <button
-            type="button"
-            className="btn btn--ghost"
-            onClick={() => {
-              void loadSessions()
-              void loadMetadata()
-            }}
-            disabled={loading || checking}
-          >
-            {loading ? 'Đang tải…' : 'Làm mới'}
-          </button>
-          {checking ? (
-            <>
-              <button type="button" className="btn btn--primary" disabled>
-                {checkTotal > 0
-                  ? `Đang kiểm tra ${checkResults.length}/${checkTotal}…`
-                  : 'Đang kiểm tra…'}
-              </button>
-              <button
-                type="button"
-                className="btn btn--danger"
-                onClick={handleStopCheck}
-              >
-                Dừng
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              className="btn btn--primary"
-              disabled={loading || sessions.length === 0}
-              onClick={() => void handleCheckAll()}
-            >
-              Kiểm tra tất cả
-            </button>
-          )}
-        </div>
-      </header>
-
       <Alert type="error" message={error} />
       <Alert type="success" message={success} />
-
-      <section className="stats-grid sessions-stats">
-        <article className="stat-card sessions-stat-card sessions-stat-card--total">
-          <p className="stat-label">Tổng session</p>
-          <p className="stat-value">{loading ? '—' : total}</p>
-          <p className="sessions-stat-foot">Trên disk</p>
-        </article>
-        <article className="stat-card sessions-stat-card sessions-stat-card--active">
-          <p className="stat-label">Active</p>
-          <p className="stat-value">{hasStatusData ? stats.active : '—'}</p>
-          <p className="sessions-stat-foot">Live</p>
-        </article>
-        <article className="stat-card sessions-stat-card sessions-stat-card--warn">
-          <p className="stat-label">Unauthorized</p>
-          <p className="stat-value">{hasStatusData ? stats.unauthorized : '—'}</p>
-          <p className="sessions-stat-foot">Hết hạn</p>
-        </article>
-        <article className="stat-card sessions-stat-card sessions-stat-card--error">
-          <p className="stat-label">Lỗi</p>
-          <p className="stat-value">{hasStatusData ? stats.error : '—'}</p>
-          <p className="sessions-stat-foot">Cần xử lý</p>
-        </article>
-      </section>
 
       {showCheckLog ? (
         <section className="panel sessions-check-log">
@@ -940,20 +862,103 @@ export function SessionsPage() {
       ) : null}
 
       <section className="panel sessions-panel">
-        <div className="sessions-list-head">
-          <div>
-            <h2>Danh sách account</h2>
-            <p className="panel-meta">
-              {!loading
-                ? hasActiveFilters
-                  ? `${filteredSessions.length} / ${sessions.length} session`
-                  : `${sessions.length} session`
-                : 'Đang tải…'}
-            </p>
+        <header className="sessions-panel-head">
+          <div className="sessions-panel-intro">
+            <div className="sessions-panel-title-row">
+              <span className="sessions-panel-icon" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <div className="sessions-panel-copy">
+                <div className="sessions-panel-badges">
+                  <span className="sessions-panel-pill">Quản lý</span>
+                  <span className="sessions-panel-pill">File .session</span>
+                </div>
+                <h1>Tài khoản</h1>
+                <p className="page-desc">
+                  Kiểm tra trạng thái và đồng bộ metadata DB. Dùng chung dữ liệu với{' '}
+                  <Link to="/roster">Sổ tài khoản</Link>.
+                </p>
+              </div>
+            </div>
           </div>
-          {!loading && sessions.length > 0 ? (
-            <span className="sessions-count-badge">{filteredSessions.length}</span>
-          ) : null}
+          <div className="sessions-panel-actions">
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={openAddAccount}
+              disabled={checking || showAddAccount}
+            >
+              Thêm tài khoản
+            </button>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => {
+                void loadSessions()
+                void loadMetadata()
+              }}
+              disabled={loading || checking}
+            >
+              {loading ? 'Đang tải…' : 'Làm mới'}
+            </button>
+            {checking ? (
+              <>
+                <button type="button" className="btn btn--primary btn--sm" disabled>
+                  {checkTotal > 0
+                    ? `Đang kiểm tra ${checkResults.length}/${checkTotal}…`
+                    : 'Đang kiểm tra…'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--danger btn--sm"
+                  onClick={handleStopCheck}
+                >
+                  Dừng
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn--primary btn--sm"
+                disabled={loading || sessions.length === 0}
+                onClick={() => void handleCheckAll()}
+              >
+                Kiểm tra tất cả
+              </button>
+            )}
+          </div>
+        </header>
+
+        <div className="sessions-panel-stats">
+          <article className="sessions-panel-stat sessions-panel-stat--total">
+            <p className="sessions-panel-stat-label">Tổng session</p>
+            <p className="sessions-panel-stat-value">{loading ? '—' : total}</p>
+            <p className="sessions-panel-stat-foot">Trên disk</p>
+          </article>
+          <article className="sessions-panel-stat sessions-panel-stat--active">
+            <p className="sessions-panel-stat-label">Active</p>
+            <p className="sessions-panel-stat-value">
+              {hasStatusData ? stats.active : '—'}
+            </p>
+            <p className="sessions-panel-stat-foot">Live</p>
+          </article>
+          <article className="sessions-panel-stat sessions-panel-stat--warn">
+            <p className="sessions-panel-stat-label">Unauthorized</p>
+            <p className="sessions-panel-stat-value">
+              {hasStatusData ? stats.unauthorized : '—'}
+            </p>
+            <p className="sessions-panel-stat-foot">Hết hạn</p>
+          </article>
+          <article className="sessions-panel-stat sessions-panel-stat--error">
+            <p className="sessions-panel-stat-label">Lỗi</p>
+            <p className="sessions-panel-stat-value">
+              {hasStatusData ? stats.error : '—'}
+            </p>
+            <p className="sessions-panel-stat-foot">Cần xử lý</p>
+          </article>
         </div>
 
         {!loading && sessions.length > 0 ? (

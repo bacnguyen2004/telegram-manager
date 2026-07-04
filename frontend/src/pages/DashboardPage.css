@@ -159,7 +159,7 @@
 }
 
 .dash-stat--sessions::before { background: #7c3aed; }
-.dash-stat--telegram::before { background: var(--success); }
+.dash-stat--audit::before { background: #0d9488; }
 .dash-stat--api::before { background: var(--warn); }
 
 .dash-stat-body {
@@ -187,9 +187,9 @@
   color: #7c3aed;
 }
 
-.dash-stat--telegram .dash-stat-icon {
-  background: rgba(22, 163, 74, 0.1);
-  color: var(--success);
+.dash-stat--audit .dash-stat-icon {
+  background: rgba(13, 148, 136, 0.1);
+  color: #0d9488;
 }
 
 .dash-stat--api .dash-stat-icon {
@@ -234,6 +234,17 @@
   text-decoration: underline;
 }
 
+.dash-stat-foot {
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.dash-stat--muted .dash-stat-value {
+  color: var(--text-muted);
+  font-size: 18px;
+}
+
 .dash-shortcuts {
   display: flex;
   flex-direction: column;
@@ -259,7 +270,7 @@
 .dash-quick-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
+  gap: 12px;
 }
 
 a.dash-quick-card,
@@ -305,6 +316,18 @@ a.dash-quick-card:hover {
   border-top: 3px solid var(--success);
 }
 
+.dash-quick-card--indigo {
+  border-top: 3px solid #4f46e5;
+}
+
+.dash-quick-card--slate {
+  border-top: 3px solid #64748b;
+}
+
+.dash-quick-card--teal {
+  border-top: 3px solid #0d9488;
+}
+
 .dash-quick-icon {
   width: 44px;
   height: 44px;
@@ -334,6 +357,21 @@ a.dash-quick-card:hover {
 .dash-quick-card--emerald .dash-quick-icon {
   background: rgba(22, 163, 74, 0.12);
   color: var(--success);
+}
+
+.dash-quick-card--indigo .dash-quick-icon {
+  background: rgba(79, 70, 229, 0.12);
+  color: #4f46e5;
+}
+
+.dash-quick-card--slate .dash-quick-icon {
+  background: rgba(100, 116, 139, 0.12);
+  color: #64748b;
+}
+
+.dash-quick-card--teal .dash-quick-icon {
+  background: rgba(13, 148, 136, 0.12);
+  color: #0d9488;
 }
 
 .dash-quick-text {
@@ -404,15 +442,14 @@ a.dash-quick-card:hover .dash-quick-arrow {
 
 .dash-api-total {
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 6px 12px;
   border-radius: 999px;
   background: var(--bg);
   border: 1px solid var(--border);
   color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .api-tabs {

@@ -8,6 +8,9 @@ export interface HealthData {
   status: 'ok' | 'degraded'
   app: string
   telegram_configured: boolean
+  database_enabled: boolean
+  database_ok: boolean
+  database_message: string
   session_dir: string
   session_dir_exists: boolean
   session_dir_writable: boolean

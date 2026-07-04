@@ -742,59 +742,77 @@ export function RosterPage() {
 
   return (
     <div className="page page--roster">
-      <header className="page-header">
-        <div>
-          <span className="roster-page-kicker">Bảng nội bộ</span>
-          <h1>Sổ acc</h1>
-          <p className="page-desc">
-            Bảng kiểu Excel — map Telegram với BTSE, Binance, Discord… Cột Telegram từ{' '}
-            <Link to="/sessions">Sessions</Link>; cột tùy chỉnh lưu trong database.
-          </p>
-          <div className="roster-shortcut-hints" aria-label="Lối tắt">
-            <span className="roster-shortcut-hint">
-              <RosterCopyIcon /> Copy SĐT
-            </span>
-            <span className="roster-shortcut-hint roster-shortcut-hint--chat">
-              <RosterChatIcon /> Chat → Dialogs
-            </span>
-            <span className="roster-shortcut-hint roster-shortcut-hint--profile">
-              <RosterProfileIcon /> Hồ sơ → Telegram ID
-            </span>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={() => void loadRoster()}
-          disabled={loading}
-        >
-          Làm mới
-        </button>
-      </header>
-
       <Alert type="error" message={error} />
       <Alert type="success" message={success} />
 
-      <section className="stats-grid">
-        <article className="stat-card">
-          <p className="stat-label">Session</p>
-          <p className="stat-value">{sheetRows.length}</p>
-        </article>
-        <article className="stat-card">
-          <p className="stat-label">Cột tùy chỉnh</p>
-          <p className="stat-value">{store.columns.length}</p>
-        </article>
-        <article className="stat-card stat-card--active">
-          <p className="stat-label">Ô đã điền</p>
-          <p className="stat-value">{filledCellCount}</p>
-        </article>
-        <article className="stat-card">
-          <p className="stat-label">Hiển thị</p>
-          <p className="stat-value">{sortedRows.length}</p>
-        </article>
-      </section>
-
       <section className="panel roster-sheet-panel">
+        <header className="roster-sheet-head">
+          <div className="roster-sheet-intro">
+            <div className="roster-sheet-title-row">
+              <span className="roster-sheet-icon" aria-hidden>
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 9h8M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </span>
+              <div className="roster-sheet-copy">
+                <div className="roster-sheet-badges">
+                  <span className="roster-sheet-pill">Bảng nội bộ</span>
+                  <span className="roster-sheet-pill">Kiểu Excel</span>
+                </div>
+                <h1>Sổ tài khoản</h1>
+                <p className="page-desc">
+                  Map Telegram với BTSE, Binance, Discord… Cột Telegram từ{' '}
+                  <Link to="/sessions">Tài khoản</Link>; cột tùy chỉnh lưu database.
+                </p>
+              </div>
+            </div>
+            <div className="roster-shortcut-hints" aria-label="Lối tắt">
+              <span className="roster-shortcut-hint">
+                <RosterCopyIcon /> Copy SĐT
+              </span>
+              <span className="roster-shortcut-hint roster-shortcut-hint--chat">
+                <RosterChatIcon /> Chat → Dialogs
+              </span>
+              <span className="roster-shortcut-hint roster-shortcut-hint--profile">
+                <RosterProfileIcon /> Hồ sơ → Telegram ID
+              </span>
+            </div>
+          </div>
+          <div className="roster-sheet-actions">
+            <Link to="/sessions" className="btn btn--ghost btn--sm">
+              Tài khoản
+            </Link>
+            <button
+              type="button"
+              className="btn btn--ghost btn--sm"
+              onClick={() => void loadRoster()}
+              disabled={loading}
+            >
+              {loading ? 'Đang tải…' : 'Làm mới'}
+            </button>
+          </div>
+        </header>
+
+        <div className="roster-sheet-stats">
+          <article className="roster-sheet-stat">
+            <p className="roster-sheet-stat-label">Session</p>
+            <p className="roster-sheet-stat-value">{sheetRows.length}</p>
+          </article>
+          <article className="roster-sheet-stat">
+            <p className="roster-sheet-stat-label">Cột tùy chỉnh</p>
+            <p className="roster-sheet-stat-value">{store.columns.length}</p>
+          </article>
+          <article className="roster-sheet-stat roster-sheet-stat--active">
+            <p className="roster-sheet-stat-label">Ô đã điền</p>
+            <p className="roster-sheet-stat-value">{filledCellCount}</p>
+          </article>
+          <article className="roster-sheet-stat">
+            <p className="roster-sheet-stat-label">Hiển thị</p>
+            <p className="roster-sheet-stat-value">{sortedRows.length}</p>
+          </article>
+        </div>
+
         <div className="roster-toolbar roster-toolbar--sheet">
           <div className="roster-toolbar-left">
             <button

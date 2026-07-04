@@ -10,21 +10,61 @@
     width: auto;
     border-right: none;
     border-bottom: 1px solid var(--border);
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
     overflow: visible;
   }
 
-  .brand {
-    margin-bottom: 0;
+  .sidebar-inner {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    padding: 14px 12px;
+    gap: 12px;
   }
 
-  .nav {
+  .sidebar-brand {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .sidebar-nav {
     flex-direction: row;
+    flex-wrap: wrap;
     flex: unset;
+    gap: 6px;
+    overflow: visible;
+    padding: 0;
+    margin: 0;
+  }
+
+  .nav-section {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .nav-section-label {
+    width: 100%;
+    margin: 0 0 2px 4px;
+  }
+
+  .nav-section-label::after {
+    display: none;
+  }
+
+  .nav-link {
+    padding: 6px 10px 6px 6px;
+    font-size: 12px;
+  }
+
+  .nav-link-text {
+    display: none;
+  }
+
+  .nav-link-icon {
+    width: 34px;
+    height: 34px;
   }
 
   .sidebar-foot {

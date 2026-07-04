@@ -1,3 +1,7 @@
+from sqlmodel import Session, select
+
+from app.db.engine import get_engine
+from app.db.models import AuditLog
 from app.schemas.conversation import (
     ConversationLineInput,
     ConversationLineResult,
@@ -6,6 +10,7 @@ from app.schemas.conversation import (
     ConversationSpeakerInput,
     ConversationTimingInput,
 )
+from app.services.conversation.audit_log import record_conversation_finish, record_conversation_start
 from app.services.conversation.parser import parse_conversation_script
 from app.services.conversation.runner import ConversationRunner
 from app.services.conversation.store import conversation_job_store
@@ -383,3 +388,82 @@ def test_resolve_final_status_stays_pending_when_lines_remain():
         error_lines=0,
     )
     assert ConversationRunner._resolve_final_status(job_id, 0) == "pending"
+
+
+def test_conversation_audit_start_and_finish(test_paths):
+    script = ConversationScriptInput(
+        group_link="https://t.me/audit_conv",
+        peer_id="-100123",
+        speakers=_two_speakers(),
+        lines=[_line(1, "a", "Hi"), _line(2, "b", "Yo")],
+        timing=ConversationTimingInput(
+            delay_min_sec=4,
+            delay_max_sec=8,
+            typing_min_sec=2,
+            typing_max_sec=5,
+        ),
+    )
+    job = conversation_job_store.create(script)
+    job_id = job.id or 0
+
+    record_conversation_start(job_id, script)
+    conversation_job_store.mark_running(job_id)
+    conversation_job_store.update_line_result(
+        job_id,
+        ConversationLineResult(
+            line_id=1,
+            speaker_id="a",
+            phone="+84901111111",
+            status="success",
+            message_id=11,
+            detail="Da gui",
+        ),
+        completed_lines=1,
+        success_lines=1,
+        error_lines=0,
+    )
+    conversation_job_store.mark_finished(job_id, "done")
+    record_conversation_finish(job_id, "done")
+
+    with Session(get_engine()) as session:
+        audits = session.exec(
+            select(AuditLog)
+            .where(AuditLog.phone == "+84901111111")
+            .order_by(AuditLog.created_at)
+        ).all()
+
+    assert len(audits) == 2
+    start = audits[0]
+    finish = audits[1]
+    assert start.action == "conversation.start"
+    assert start.status == "info"
+    assert start.resource == "-100123"
+    assert "total_lines" in (start.detail or "")
+    assert "typing_min_sec" in (start.detail or "")
+
+    assert finish.action == "conversation.run"
+    assert finish.status == "success"
+    assert "success_lines" in (finish.detail or "")
+    assert "final_status" in (finish.detail or "")
+
+
+def test_conversation_audit_maps_error_status(test_paths):
+    script = ConversationScriptInput(
+        group_link="https://t.me/g",
+        speakers=_two_speakers(),
+        lines=[_line(1, "a", "Hi")],
+        timing=ConversationTimingInput(),
+    )
+    job = conversation_job_store.create(script)
+    job_id = job.id or 0
+    conversation_job_store.mark_finished(job_id, "error", "Gui that bai")
+    record_conversation_finish(job_id, "error", error_message="Gui that bai")
+
+    with Session(get_engine()) as session:
+        row = session.exec(
+            select(AuditLog).where(AuditLog.action == "conversation.run")
+        ).first()
+
+    assert row is not None
+    assert row.status == "error"
+    assert "error_message" in (row.detail or "")

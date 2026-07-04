@@ -4,6 +4,7 @@ import re
 
 from ...schemas.conversation import ConversationLineResult, ConversationScriptInput
 from ..telegram import telegram_message_service
+from .audit_log import record_conversation_finish, record_conversation_start
 from .store import conversation_job_store
 
 
@@ -43,11 +44,28 @@ class ConversationRunner:
                 return
             script = conversation_job_store.load_script(job)
             conversation_job_store.mark_running(job_id)
+            record_conversation_start(job_id, script, only_line_id=only_line_id)
             await self._execute_script(job_id, script, only_line_id=only_line_id)
         except Exception as exc:
-            conversation_job_store.mark_finished(job_id, "error", str(exc))
+            self._finish_job(job_id, "error", error_message=str(exc), only_line_id=only_line_id)
         finally:
             self._active_jobs.discard(job_id)
+
+    def _finish_job(
+        self,
+        job_id: int,
+        status: str,
+        *,
+        error_message: str | None = None,
+        only_line_id: int | None = None,
+    ) -> None:
+        conversation_job_store.mark_finished(job_id, status, error_message)
+        record_conversation_finish(
+            job_id,
+            status,
+            error_message=error_message,
+            only_line_id=only_line_id,
+        )
 
     async def _execute_script(
         self,
@@ -88,7 +106,7 @@ class ConversationRunner:
 
         for index, line in enumerate(ordered_lines):
             if conversation_job_store.should_stop(job_id):
-                conversation_job_store.mark_finished(job_id, "stopped")
+                self._finish_job(job_id, "stopped", only_line_id=only_line_id)
                 return
 
             existing = results_by_id.get(line.id)
@@ -124,7 +142,7 @@ class ConversationRunner:
                     error_lines=error_count,
                 )
                 if not script.continue_on_error:
-                    conversation_job_store.mark_finished(job_id, "error")
+                    self._finish_job(job_id, "error", only_line_id=only_line_id)
                     return
                 continue
 
@@ -162,7 +180,7 @@ class ConversationRunner:
                     typing_seconds,
                 )
                 if conversation_job_store.should_stop(job_id):
-                    conversation_job_store.mark_finished(job_id, "stopped")
+                    self._finish_job(job_id, "stopped", only_line_id=only_line_id)
                     return
 
             send_result = await self._send_with_flood_retry(
@@ -228,7 +246,7 @@ class ConversationRunner:
             )
 
             if result.status == "error" and not script.continue_on_error:
-                conversation_job_store.mark_finished(job_id, "error")
+                self._finish_job(job_id, "error", only_line_id=only_line_id)
                 return
 
             if only_line_id is not None:
@@ -256,9 +274,10 @@ class ConversationRunner:
                     )
                     await self._sleep_with_stop(job_id, delay_seconds)
 
-        conversation_job_store.mark_finished(
+        self._finish_job(
             job_id,
             self._resolve_final_status(job_id, error_count),
+            only_line_id=only_line_id,
         )
 
     @staticmethod

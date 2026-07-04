@@ -1,17 +1,18 @@
 .page--roster {
+  --page-bleed-x: 32px;
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-.roster-page-kicker {
-  display: inline-block;
-  margin-bottom: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent);
+.page--roster .roster-sheet-panel {
+  width: calc(100% + var(--page-bleed-x) * 2);
+  max-width: calc(100% + var(--page-bleed-x) * 2);
+  margin-left: calc(var(--page-bleed-x) * -1);
+  margin-right: calc(var(--page-bleed-x) * -1);
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
 }
 
 .roster-shortcut-hints {
@@ -61,7 +62,7 @@
 }
 
 .roster-toolbar--sheet {
-  padding: 14px 16px;
+  padding: 14px 32px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -120,7 +121,7 @@
   justify-content: space-between;
   gap: 12px 16px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 12px 32px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--bg) 55%, var(--bg-elevated));
 }
@@ -245,6 +246,189 @@
 .roster-sheet-panel {
   padding: 0;
   overflow: hidden;
+  width: 100%;
+}
+
+.roster-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 24px 32px 20px;
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(135deg, rgba(100, 116, 139, 0.11), transparent 52%),
+    linear-gradient(180deg, color-mix(in srgb, #64748b 5%, var(--bg-elevated)), var(--bg-elevated));
+  position: relative;
+  overflow: hidden;
+}
+
+.roster-sheet-head::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 16px;
+  bottom: 16px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, #64748b, color-mix(in srgb, #64748b 40%, var(--accent)));
+}
+
+.roster-sheet-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.roster-sheet-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #fff;
+  background: linear-gradient(145deg, #64748b, color-mix(in srgb, #64748b 50%, #475569));
+  box-shadow: 0 6px 18px color-mix(in srgb, #64748b 26%, transparent);
+}
+
+.roster-sheet-icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+.roster-sheet-copy {
+  min-width: 0;
+}
+
+.roster-sheet-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.roster-sheet-pill {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: color-mix(in srgb, #64748b 8%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, #64748b 24%, var(--border));
+  color: #64748b;
+}
+
+.roster-sheet-head h1 {
+  margin: 0 0 8px;
+  font-size: clamp(24px, 2.8vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text-strong);
+  line-height: 1.15;
+}
+
+.roster-sheet-copy .page-desc {
+  margin: 0;
+  max-width: 58ch;
+  line-height: 1.55;
+}
+
+.roster-sheet-copy .page-desc a {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.roster-sheet-copy .page-desc a:hover {
+  text-decoration: underline;
+}
+
+.roster-sheet-intro .roster-shortcut-hints {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed color-mix(in srgb, var(--border) 85%, transparent);
+}
+
+.roster-sheet-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg) 65%, var(--bg-elevated));
+  box-shadow: var(--shadow);
+  align-self: center;
+}
+
+.roster-sheet-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  background:
+    linear-gradient(180deg, var(--bg), color-mix(in srgb, var(--bg-elevated) 80%, var(--bg)));
+}
+
+.roster-sheet-stat {
+  position: relative;
+  padding: 16px 22px 14px 26px;
+  border-right: 1px solid var(--border);
+  min-width: 0;
+}
+
+.roster-sheet-stat::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 4px;
+  background: var(--accent);
+  opacity: 0.45;
+}
+
+.roster-sheet-stat:nth-child(2)::before {
+  background: #64748b;
+  opacity: 0.75;
+}
+
+.roster-sheet-stat:last-child {
+  border-right: none;
+}
+
+.roster-sheet-stat-label {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.roster-sheet-stat-value {
+  margin: 0;
+  font-size: clamp(22px, 2.2vw, 28px);
+  font-weight: 800;
+  color: var(--text-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.roster-sheet-stat--active::before {
+  background: var(--success);
+  opacity: 1;
+}
+
+.roster-sheet-stat--active .roster-sheet-stat-value {
+  color: var(--success);
 }
 
 .roster-sheet-wrap {
@@ -597,7 +781,7 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 12px 16px;
+  padding: 12px 32px;
   border-top: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
@@ -902,4 +1086,57 @@
 .roster-col-modal-actions .btn {
   flex: 1;
   justify-content: center;
+}
+
+@media (max-width: 960px) {
+  .page--roster {
+    --page-bleed-x: 16px;
+  }
+
+  .roster-sheet-head,
+  .roster-toolbar--sheet,
+  .roster-search-bar,
+  .roster-foot {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .roster-sheet-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .roster-sheet-stat:nth-child(2) {
+    border-right: none;
+  }
+
+  .roster-sheet-stat:nth-child(1),
+  .roster-sheet-stat:nth-child(2) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+@media (max-width: 640px) {
+  .roster-sheet-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .roster-sheet-actions {
+    justify-content: flex-end;
+    width: 100%;
+    align-self: stretch;
+  }
+
+  .roster-sheet-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+  }
+
+  .roster-sheet-icon svg {
+    width: 22px;
+    height: 22px;
+  }
 }

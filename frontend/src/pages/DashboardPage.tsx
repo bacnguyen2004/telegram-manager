@@ -4,75 +4,60 @@ import { Link } from 'react-router-dom'
 import { api } from '../api/client'
 import { Alert } from '../components/Alert'
 import { StatusBadge } from '../components/StatusBadge'
-import type { HealthData } from '../types/api'
-
-const apiMap = [
-  { group: 'Health', items: [{ method: 'GET', path: '/api/health', page: '/health' }] },
-  {
-    group: 'Sessions',
-    items: [
-      { method: 'GET', path: '/api/sessions', page: '/sessions' },
-      { method: 'POST', path: '/api/sessions/check', page: '/sessions' },
-      { method: 'GET', path: '/api/sessions/{phone}', page: '/sessions' },
-      { method: 'DELETE', path: '/api/sessions/{phone}', page: '/sessions' },
-      { method: 'GET', path: '/api/sessions/{phone}/me', page: '/sessions' },
-    ],
-  },
-  {
-    group: 'Groups',
-    items: [
-      { method: 'POST', path: '/api/groups/join', page: '/groups' },
-      { method: 'POST', path: '/api/groups/leave', page: '/groups' },
-      { method: 'POST', path: '/api/groups/leave-all', page: '/groups' },
-      { method: 'GET', path: '/api/groups/{phone}', page: '/groups' },
-    ],
-  },
-  {
-    group: 'Dialogs',
-    items: [
-      { method: 'GET', path: '/api/dialogs/{phone}', page: '/dialogs' },
-      { method: 'GET', path: '/api/dialogs/{phone}/messages', page: '/dialogs' },
-      { method: 'POST', path: '/api/dialogs/{phone}/read', page: '/dialogs' },
-      { method: 'GET', path: '/api/dialogs/{phone}/messages/{id}/photo', page: '/dialogs' },
-      { method: 'POST', path: '/api/messages/send', page: '/dialogs' },
-      { method: 'POST', path: '/api/messages/reply', page: '/dialogs' },
-      { method: 'POST', path: '/api/messages/send-media', page: '/dialogs' },
-      { method: 'POST', path: '/api/messages/react', page: '/dialogs' },
-      { method: 'GET', path: '/api/messages/poll', page: '/tasks' },
-      { method: 'POST', path: '/api/messages/poll/add-option', page: '/tasks' },
-      { method: 'POST', path: '/api/messages/vote', page: '/tasks' },
-      { method: 'POST', path: '/api/messages/vote/cancel', page: '/tasks' },
-      { method: 'DELETE', path: '/api/messages/react', page: '/dialogs' },
-      { method: 'DELETE', path: '/api/messages/{id}', page: '/dialogs' },
-    ],
-  },
-  {
-    group: 'Metadata',
-    items: [
-      { method: 'GET', path: '/api/metadata/overview', page: '/audit' },
-      { method: 'GET', path: '/api/metadata/audit', page: '/audit' },
-      { method: 'GET', path: '/api/metadata/group-scans', page: '/audit' },
-      { method: 'GET', path: '/api/metadata/sessions', page: '/sessions' },
-    ],
-  },
-  {
-    group: 'Auth',
-    items: [
-      { method: 'POST', path: '/api/auth/send-code', page: '/sessions?add=1' },
-      { method: 'POST', path: '/api/auth/login', page: '/sessions?add=1' },
-      { method: 'POST', path: '/api/auth/register', page: '/sessions?add=1' },
-      { method: 'GET', path: '/api/auth/login-code/{phone}', page: null },
-      { method: 'PUT', path: '/api/auth/2fa', page: '/security' },
-      { method: 'PUT', path: '/api/auth/privacy', page: '/security' },
-    ],
-  },
-] as const
+import type { HealthData, MetadataOverviewData } from '../types/api'
+import {
+  API_ENDPOINT_COUNT,
+  apiMap,
+  pageLabel,
+  type ApiGroupId,
+} from '../utils/apiMap'
 
 const quickLinks = [
   {
+    key: 'sessions',
+    to: '/sessions',
+    label: 'Tài khoản',
+    desc: 'Kiểm tra & quản lý file .session',
+    accent: 'violet',
+    icon: (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
+        <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    key: 'roster',
+    to: '/roster',
+    label: 'Sổ tài khoản',
+    desc: 'Bảng tổng hợp acc, cột tùy chỉnh',
+    accent: 'slate',
+    icon: (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
+        <rect x="4" y="5" width="16" height="14" rx="2" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M8 9h8M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    key: 'groups',
+    to: '/groups',
+    label: 'Nhóm & kênh',
+    desc: 'Join, leave, quét danh sách',
+    accent: 'amber',
+    icon: (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
+        <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="17" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+        <path d="M3 19c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    key: 'dialogs',
     to: '/dialogs',
-    label: 'Dialogs',
-    desc: 'Chat, gửi ảnh, trả lời tin',
+    label: 'Tin nhắn',
+    desc: 'Đọc chat, gửi ảnh, reply, reaction',
     accent: 'cyan',
     icon: (
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
@@ -86,20 +71,9 @@ const quickLinks = [
     ),
   },
   {
-    to: '/sessions',
-    label: 'Sessions',
-    desc: 'Kiểm tra & quản lý .session',
-    accent: 'violet',
-    icon: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
-        <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M8 12h8M12 8v8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    ),
-  },
-  {
+    key: 'tasks',
     to: '/tasks',
-    label: 'Tasks',
+    label: 'Tác vụ hàng loạt',
     desc: 'Nhiều acc · join · react · reply',
     accent: 'emerald',
     icon: (
@@ -115,23 +89,28 @@ const quickLinks = [
     ),
   },
   {
-    to: '/groups',
-    label: 'Groups',
-    desc: 'Join, leave, danh sách nhóm',
-    accent: 'amber',
+    key: 'conversation',
+    to: '/conversation',
+    label: 'Hội thoại tự nhiên',
+    desc: 'Kịch bản nhiều vai, delay & typing',
+    accent: 'indigo',
     icon: (
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
-        <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
-        <circle cx="17" cy="10" r="2.5" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M3 19c0-3 3-5 6-5s6 2 6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path
+          d="M8 10h8M8 14h5M6 4h12a2 2 0 0 1 2 2v11l-3-2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
   {
+    key: 'audit',
     to: '/audit',
-    label: 'Audit',
-    desc: 'Nhật ký login, join, quét nhóm',
-    accent: 'violet',
+    label: 'Nhật ký hoạt động',
+    desc: 'Login, nhóm, hội thoại — PostgreSQL',
+    accent: 'teal',
     icon: (
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
         <path
@@ -145,14 +124,20 @@ const quickLinks = [
     ),
   },
   {
-    to: '/sessions?add=1',
-    label: 'Thêm tài khoản',
-    desc: 'OTP, 2FA, đăng ký session',
+    key: 'security',
+    to: '/security',
+    label: 'Bảo mật',
+    desc: 'Đổi 2FA, privacy invite hàng loạt',
     accent: 'rose',
     icon: (
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
-        <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
-        <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <path
+          d="M12 3l8 4v6c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4Z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path d="M9 12l2 2 4-4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -172,26 +157,21 @@ function StatIconBackend() {
 function StatIconSessions() {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden>
-      <path
-        d="M7 4h10v16H7z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
+      <path d="M7 4h10v16H7z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
       <path d="M10 8h4M10 12h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }
 
-function StatIconTelegram() {
+function StatIconAudit() {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden>
       <path
-        d="M12 2L3 7v10l9 5 9-5V7l-9-5Z"
+        d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"
         stroke="currentColor"
         strokeWidth="1.8"
-        strokeLinejoin="round"
       />
+      <path d="M9 12h6M9 16h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   )
 }
@@ -204,35 +184,60 @@ function StatIconApi() {
   )
 }
 
+function databaseAsideText(health: HealthData | null): string {
+  if (!health) return 'Đang kiểm tra database…'
+  if (!health.database_enabled) return 'Database tắt — audit/metadata không ghi'
+  if (!health.database_ok) return health.database_message || 'Database lỗi kết nối'
+  return 'PostgreSQL metadata đang bật'
+}
+
 export function DashboardPage() {
   const [health, setHealth] = useState<HealthData | null>(null)
   const [sessionTotal, setSessionTotal] = useState<number | null>(null)
+  const [overview, setOverview] = useState<MetadataOverviewData | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
-  const [apiTab, setApiTab] = useState<(typeof apiMap)[number]['group']>('Dialogs')
+  const [apiTab, setApiTab] = useState<ApiGroupId>('sessions')
 
   const activeGroup = useMemo(
-    () => apiMap.find((g) => g.group === apiTab) ?? apiMap[0],
+    () => apiMap.find((group) => group.group === apiTab) ?? apiMap[0],
     [apiTab],
   )
 
-  const totalEndpoints = useMemo(
-    () => apiMap.reduce((sum, group) => sum + group.items.length, 0),
-    [],
-  )
+  const auditTotal = useMemo(() => {
+    if (!overview?.database_enabled) return null
+    return overview.audit_log_count
+  }, [overview])
+
+  const auditStatLabel = useMemo(() => {
+    if (loading) return '…'
+    if (auditTotal !== null) return String(auditTotal)
+    if (health && !health.database_enabled) return 'Tắt'
+    return '—'
+  }, [auditTotal, health, loading])
+
+  const accountCount = useMemo(() => {
+    if (sessionTotal !== null) return sessionTotal
+    if (health) return health.session_count
+    return null
+  }, [health, sessionTotal])
 
   useEffect(() => {
     void (async () => {
       setLoading(true)
       setError('')
       try {
-        const [healthRes, sessionsRes] = await Promise.all([
+        const [healthRes, sessionsRes, overviewRes] = await Promise.all([
           api.health(),
           api.listSessions(),
+          api.metadataOverview(),
         ])
         if (healthRes.success && healthRes.data) setHealth(healthRes.data)
         if (sessionsRes.success && sessionsRes.data) {
           setSessionTotal(sessionsRes.data.total)
+        }
+        if (overviewRes.success && overviewRes.data) {
+          setOverview(overviewRes.data)
         }
       } catch {
         setError('Không kết nối được backend.')
@@ -251,17 +256,20 @@ export function DashboardPage() {
             <span className="dash-pill">Telethon</span>
             <span className="dash-pill">React</span>
           </div>
-          <h1 className="dash-hero-title">Telegram Manager</h1>
+          <h1 className="dash-hero-title">Tổng quan</h1>
           <p className="dash-hero-desc">
-            Quản lý session, nhóm, hội thoại và tin nhắn — giao diện thống nhất
-            cho toàn bộ API.
+            Quản lý tài khoản Telegram, tin nhắn, nhóm, tác vụ hàng loạt và hội thoại tự nhiên —
+            {API_ENDPOINT_COUNT} REST endpoint qua một dashboard.
           </p>
           <div className="dash-hero-actions">
-            <Link to="/dialogs" className="btn btn--primary">
-              Mở Dialogs
+            <Link to="/sessions?add=1" className="btn btn--primary">
+              Thêm tài khoản
             </Link>
-            <Link to="/sessions" className="btn btn--glass">
-              Sessions
+            <Link to="/dialogs" className="btn btn--glass">
+              Tin nhắn
+            </Link>
+            <Link to="/conversation" className="btn btn--ghost">
+              Hội thoại tự nhiên
             </Link>
             <a
               href="http://127.0.0.1:8001/docs"
@@ -275,7 +283,7 @@ export function DashboardPage() {
         </div>
         <aside className="dash-hero-aside">
           <div className="dash-hero-status">
-            <span className="dash-hero-status-label">Hệ thống</span>
+            <span className="dash-hero-status-label">Backend</span>
             {loading ? (
               <span className="muted">Đang kiểm tra…</span>
             ) : health ? (
@@ -289,13 +297,14 @@ export function DashboardPage() {
               ? 'Telegram API đã cấu hình'
               : 'Chưa cấu hình Telegram trong .env'}
           </p>
+          <p className="dash-hero-aside-meta">{databaseAsideText(health)}</p>
           <p className="dash-hero-aside-meta mono">
-            {totalEndpoints} endpoints · port 8001
+            {API_ENDPOINT_COUNT} endpoint · 127.0.0.1:8001
           </p>
         </aside>
       </section>
 
-      <Alert type="error" message={error} />
+      <Alert type="error" message={error} onDismiss={() => setError('')} />
 
       <section className="dash-stats">
         <article className="dash-stat dash-stat--backend">
@@ -307,6 +316,9 @@ export function DashboardPage() {
             <p className="dash-stat-value dash-stat-value--sm">
               {loading ? '…' : health ? <StatusBadge status={health.status} /> : '—'}
             </p>
+            <Link className="dash-stat-link" to="/health">
+              Chi tiết →
+            </Link>
           </div>
         </article>
         <article className="dash-stat dash-stat--sessions">
@@ -314,30 +326,27 @@ export function DashboardPage() {
             <StatIconSessions />
           </div>
           <div className="dash-stat-body">
-            <p className="dash-stat-label">Sessions</p>
+            <p className="dash-stat-label">Tài khoản</p>
             <p className="dash-stat-value">
-              {loading ? '…' : (sessionTotal ?? '—')}
+              {loading ? '…' : (accountCount ?? '—')}
             </p>
             <Link className="dash-stat-link" to="/sessions">
               Quản lý →
             </Link>
           </div>
         </article>
-        <article className="dash-stat dash-stat--telegram">
+        <article
+          className={`dash-stat dash-stat--audit${auditTotal === null && !loading && health && !health.database_enabled ? ' dash-stat--muted' : ''}`}
+        >
           <div className="dash-stat-icon">
-            <StatIconTelegram />
+            <StatIconAudit />
           </div>
           <div className="dash-stat-body">
-            <p className="dash-stat-label">Telegram</p>
-            <p className="dash-stat-value dash-stat-value--sm">
-              {loading
-                ? '…'
-                : health
-                  ? health.telegram_configured
-                    ? 'Configured'
-                    : 'Thiếu .env'
-                  : '—'}
-            </p>
+            <p className="dash-stat-label">Nhật ký</p>
+            <p className="dash-stat-value">{auditStatLabel}</p>
+            <Link className="dash-stat-link" to="/audit">
+              Xem nhật ký →
+            </Link>
           </div>
         </article>
         <article className="dash-stat dash-stat--api">
@@ -345,8 +354,9 @@ export function DashboardPage() {
             <StatIconApi />
           </div>
           <div className="dash-stat-body">
-            <p className="dash-stat-label">Endpoints</p>
-            <p className="dash-stat-value">{totalEndpoints}</p>
+            <p className="dash-stat-label">REST API</p>
+            <p className="dash-stat-value">{API_ENDPOINT_COUNT}</p>
+            <span className="dash-stat-foot muted">endpoint</span>
           </div>
         </article>
       </section>
@@ -354,12 +364,12 @@ export function DashboardPage() {
       <section className="dash-shortcuts">
         <div className="dash-section-head">
           <h2>Lối tắt</h2>
-          <p className="muted">Vào nhanh các tính năng chính</p>
+          <p className="muted">Cùng thứ tự menu — vào nhanh từng trang</p>
         </div>
         <div className="dash-quick-grid">
           {quickLinks.map((item) => (
             <Link
-              key={item.to}
+              key={item.key}
               to={item.to}
               className={`dash-quick-card dash-quick-card--${item.accent}`}
             >
@@ -381,10 +391,10 @@ export function DashboardPage() {
           <div>
             <h2>Bản đồ API</h2>
             <p className="panel-meta">
-              {activeGroup.items.length} endpoint · nhóm {apiTab}
+              {activeGroup.items.length} endpoint · {activeGroup.label}
             </p>
           </div>
-          <span className="dash-api-total mono">{totalEndpoints} total</span>
+          <span className="dash-api-total mono">{API_ENDPOINT_COUNT} endpoint</span>
         </div>
 
         <div className="api-tabs" role="tablist" aria-label="Nhóm API">
@@ -397,7 +407,7 @@ export function DashboardPage() {
               className={`api-tab${apiTab === group.group ? ' api-tab--active' : ''}`}
               onClick={() => setApiTab(group.group)}
             >
-              {group.group}
+              {group.label}
               <span className="api-tab-count">{group.items.length}</span>
             </button>
           ))}
@@ -414,7 +424,7 @@ export function DashboardPage() {
             </thead>
             <tbody>
               {activeGroup.items.map((item) => (
-                <tr key={item.path}>
+                <tr key={`${item.method}-${item.path}`}>
                   <td className="col-method">
                     <span className={`method method--${item.method.toLowerCase()}`}>
                       {item.method}
@@ -426,10 +436,10 @@ export function DashboardPage() {
                   <td className="col-page">
                     {item.page ? (
                       <Link className="api-page-link" to={item.page}>
-                        {item.page}
+                        {pageLabel(item.page)}
                       </Link>
                     ) : (
-                      <span className="api-page-only">API</span>
+                      <span className="api-page-only">Chỉ API</span>
                     )}
                   </td>
                 </tr>
