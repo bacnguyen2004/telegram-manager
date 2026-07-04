@@ -110,6 +110,12 @@ def test_record_group_scan_and_snapshot():
         scans = session.exec(select(GroupScan).where(GroupScan.phone == phone)).all()
         assert len(scans) == 1
 
+    scans = metadata_store.list_group_scans(phone=phone, limit=1)
+    assert scans["total"] == 1
+    assert scans["items"][0]["total"] == 2
+    assert scans["items"][0]["group_count"] == 1
+    assert scans["items"][0]["channel_count"] == 1
+
 
 def test_list_audit_logs_and_group_scans(client):
     phone = "+84901230000"

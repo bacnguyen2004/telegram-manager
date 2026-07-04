@@ -12,6 +12,7 @@ from telethon.tl.functions.messages import (
     AppendTodoListRequest,
     SendReactionRequest,
     SendVoteRequest,
+    SetTypingRequest,
     ToggleTodoCompletedRequest,
 )
 from telethon.tl.types import (
@@ -21,6 +22,7 @@ from telethon.tl.types import (
     MessageMediaWebPage,
     ReactionEmoji,
     ReactionEmpty,
+    SendMessageTypingAction,
     TextWithEntities,
     TodoItem,
 )
@@ -253,6 +255,57 @@ class TelegramMessageService:
             reply_to_msg_id=reply_to_msg_id,
             success_message="Da tra loi tin nhan",
         )
+
+    async def send_typing(self, phone: str, peer_id: str) -> dict:
+        phone = phone.strip()
+        peer_ref = str(peer_id or "").strip()
+
+        if not phone:
+            return self._error(phone, peer_ref, "Thieu phone")
+        if not peer_ref:
+            return self._error(phone, peer_ref, "Thieu peer_id")
+
+        try:
+            settings.validate_telegram_config()
+        except ValueError as exc:
+            return self._error(phone, peer_ref, str(exc))
+
+        session_file = self._session_file(phone)
+        if not session_file.exists():
+            return self._error(
+                phone,
+                peer_ref,
+                f"Khong tim thay file session: {session_file}",
+            )
+
+        try:
+            async with telethon_session(
+                phone, self.api_id, self.api_hash, self.session_dir
+            ) as client:
+                if not await client.is_user_authorized():
+                    return self._error(
+                        phone,
+                        peer_ref,
+                        "Session chua dang nhap hoac da het han",
+                    )
+
+                entity = await self._resolve_peer(client, peer_ref)
+                await client(
+                    SetTypingRequest(peer=entity, action=SendMessageTypingAction())
+                )
+
+                return {
+                    "status": "success",
+                    "phone": phone,
+                    "peer_id": peer_ref,
+                    "message_id": None,
+                    "reply_to_msg_id": None,
+                    "message": "Da gui typing",
+                }
+        except FloodWaitError as exc:
+            return self._error(phone, peer_ref, f"Flood wait {exc.seconds}s")
+        except Exception as exc:
+            return self._error(phone, peer_ref, str(exc))
 
     async def send_reaction(
         self,

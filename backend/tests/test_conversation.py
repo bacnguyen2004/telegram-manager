@@ -232,6 +232,53 @@ def test_create_job_with_start_line_id_marks_earlier_lines_skipped():
     assert results[3] == "pending"
 
 
+def test_create_job_with_start_line_id_carries_success_results():
+    script = ConversationScriptInput(
+        group_link="https://t.me/g",
+        speakers=_two_speakers(),
+        lines=[
+            _line(1, "a", "One"),
+            _line(2, "b", "Two"),
+            _line(3, "a", "Three"),
+            _line(4, "b", "Four"),
+        ],
+        timing=ConversationTimingInput(),
+    )
+    carried = [
+        ConversationLineResult(
+            line_id=1,
+            speaker_id="a",
+            phone="+84901111111",
+            status="success",
+            message_id=101,
+            detail="Da gui",
+        ),
+        ConversationLineResult(
+            line_id=2,
+            speaker_id="b",
+            phone="+84902222222",
+            status="success",
+            message_id=102,
+            detail="Da gui",
+        ),
+    ]
+    job = conversation_job_store.create(
+        script,
+        start_line_id=4,
+        carried_line_results=carried,
+    )
+    results = {
+        item.line_id: item
+        for item in conversation_job_store.get_line_results(job.id or 0)
+    }
+    assert results[1].status == "success"
+    assert results[1].message_id == 101
+    assert results[2].status == "success"
+    assert results[3].status == "skipped"
+    assert results[3].detail == "Bo qua — chay tu dong #4"
+    assert results[4].status == "pending"
+
+
 def test_store_reset_line_for_retry():
     script = ConversationScriptInput(
         group_link="https://t.me/g",
@@ -258,6 +305,50 @@ def test_store_reset_line_for_retry():
     assert reset is not None
     results = {item.line_id: item.status for item in conversation_job_store.get_line_results(job_id)}
     assert results[2] == "pending"
+
+
+def test_running_detail_includes_typing_seconds():
+    detail = ConversationRunner._running_detail(5, None, 2)
+    assert "Dang go (5s)" in detail
+    assert "Tra loi dong #2" in detail
+
+
+def test_wait_detail_describes_speaker_change():
+    assert ConversationRunner._wait_detail(12, True) == "Cho delay (12s) — doi nguoi"
+    assert ConversationRunner._wait_detail(8, False) == "Cho delay (8s) — cung nguoi"
+
+
+def test_success_detail_includes_typing_when_used():
+    detail = ConversationRunner._success_detail(
+        "Da gui tin nhan",
+        101,
+        None,
+        None,
+        typing_seconds=4,
+    )
+    assert "Go 4s" in detail
+    assert "TG #101" in detail
+
+
+def test_pick_typing_delay_disabled_when_max_zero():
+    script = ConversationScriptInput(
+        group_link="https://t.me/g",
+        speakers=_two_speakers(),
+        lines=[_line(1, "a", "One")],
+        timing=ConversationTimingInput(typing_min_sec=2, typing_max_sec=0),
+    )
+    assert ConversationRunner._pick_typing_delay(script) == 0
+
+
+def test_pick_typing_delay_swaps_inverted_range():
+    script = ConversationScriptInput(
+        group_link="https://t.me/g",
+        speakers=_two_speakers(),
+        lines=[_line(1, "a", "One")],
+        timing=ConversationTimingInput(typing_min_sec=8, typing_max_sec=3),
+    )
+    delay = ConversationRunner._pick_typing_delay(script)
+    assert 3 <= delay <= 8
 
 
 def test_resolve_final_status_marks_error_when_lines_failed():

@@ -69,9 +69,23 @@ async def create_conversation_job(payload: ConversationJobCreateRequest) -> dict
         if payload.start_line_id not in line_ids:
             raise HTTPException(status_code=400, detail=f"start_line_id #{payload.start_line_id} khong ton tai")
 
+    carried_results = payload.carried_line_results
+    if payload.start_line_id is not None and carried_results:
+        line_ids = {line.id for line in validation.script.lines}
+        carried_results = [
+            item
+            for item in carried_results
+            if item.line_id in line_ids
+            and item.line_id < payload.start_line_id
+            and item.status == "success"
+        ]
+    else:
+        carried_results = []
+
     job = conversation_job_store.create(
         validation.script,
         start_line_id=payload.start_line_id,
+        carried_line_results=carried_results,
     )
     started = conversation_runner.start(job.id or 0)
     if not started and job.id is not None:

@@ -31,21 +31,51 @@ class ConversationJobStore:
         script: ConversationScriptInput,
         *,
         start_line_id: int | None = None,
+        carried_line_results: list[ConversationLineResult] | None = None,
     ) -> ConversationJob:
         now = _utc_now()
+        carried_map: dict[int, ConversationLineResult] = {}
+        if carried_line_results:
+            for item in carried_line_results:
+                if item.status == "success":
+                    carried_map[item.line_id] = item
+
         line_results = []
         for line in sorted(script.lines, key=lambda item: item.id):
+            phone = self._phone_for_speaker(script, line.speaker_id)
             if start_line_id is not None and line.id < start_line_id:
-                status = "skipped"
-            else:
-                status = "pending"
+                carried = carried_map.get(line.id)
+                if carried:
+                    line_results.append(
+                        ConversationLineResult(
+                            line_id=line.id,
+                            speaker_id=line.speaker_id,
+                            phone=phone or carried.phone,
+                            status="success",
+                            message_id=carried.message_id,
+                            reply_to_msg_id=carried.reply_to_msg_id,
+                            detail=self._carried_detail(carried),
+                        ).model_dump()
+                    )
+                    continue
+                line_results.append(
+                    ConversationLineResult(
+                        line_id=line.id,
+                        speaker_id=line.speaker_id,
+                        phone=phone,
+                        status="skipped",
+                        detail=f"Bo qua — chay tu dong #{start_line_id}",
+                    ).model_dump()
+                )
+                continue
+
             line_results.append(
                 ConversationLineResult(
                     line_id=line.id,
                     speaker_id=line.speaker_id,
-                    phone=self._phone_for_speaker(script, line.speaker_id),
-                    status=status,
-                    detail="Bo qua" if status == "skipped" else "",
+                    phone=phone,
+                    status="pending",
+                    detail="",
                 ).model_dump()
             )
 
@@ -259,6 +289,15 @@ class ConversationJobStore:
     def _load_line_results(self, job: ConversationJob) -> list[ConversationLineResult]:
         raw = json.loads(job.line_results_json or "[]")
         return [ConversationLineResult.model_validate(item) for item in raw]
+
+    @staticmethod
+    def _carried_detail(carried: ConversationLineResult) -> str:
+        parts = ["Giu tu job truoc"]
+        if carried.message_id is not None:
+            parts.append(f"TG #{carried.message_id}")
+        if carried.detail and carried.detail.strip() not in ("", "Da gui", "Da gui truoc"):
+            parts.append(carried.detail.strip())
+        return " · ".join(parts)
 
     def _phone_for_speaker(self, script: ConversationScriptInput, speaker_id: str) -> str:
         for speaker in script.speakers:

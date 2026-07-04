@@ -118,6 +118,7 @@ class TelegramDialogService:
                     "status": "success",
                     "phone": phone,
                     "total": len(items),
+                    "limit": limit,
                     "counts": counts,
                     "dialogs": items,
                     "message": "OK",

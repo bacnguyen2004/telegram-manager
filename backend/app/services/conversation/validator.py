@@ -106,6 +106,29 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
             )
         )
 
+    if (
+        script.timing.speaker_change_delay_min_sec
+        > script.timing.speaker_change_delay_max_sec
+    ):
+        issues.append(
+            ConversationValidationIssue(
+                level="warning",
+                code="speaker_delay_range",
+                message=(
+                    "speaker_change_delay_min_sec lon hon max — se tu hoan doi khi chay"
+                ),
+            )
+        )
+
+    if script.timing.typing_min_sec > script.timing.typing_max_sec:
+        issues.append(
+            ConversationValidationIssue(
+                level="warning",
+                code="typing_range",
+                message="typing_min_sec lon hon typing_max_sec — se tu hoan doi khi chay",
+            )
+        )
+
     has_errors = any(item.level == "error" for item in issues)
     return ConversationValidateData(
         valid=not has_errors and bool(script.lines),

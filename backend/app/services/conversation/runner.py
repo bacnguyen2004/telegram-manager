@@ -105,7 +105,7 @@ class ConversationRunner:
                     speaker_id=line.speaker_id,
                     phone="",
                     status="error",
-                    detail="Khong tim thay vai",
+                    detail="Khong tim thay vai dien",
                 )
                 if existing and existing.status == "success" and only_line_id is None:
                     completed = max(0, completed - 1)
@@ -129,12 +129,22 @@ class ConversationRunner:
                 continue
 
             phone = speaker.phone.strip()
+            reply_to = self._resolve_reply_to(
+                line,
+                sent_ids,
+                previous_speaker_id,
+                previous_message_id,
+                script.reply_on_speaker_change,
+            )
+
+            typing_seconds = self._pick_typing_delay(script)
             running = ConversationLineResult(
                 line_id=line.id,
                 speaker_id=line.speaker_id,
                 phone=phone,
                 status="running",
-                detail="Dang gui...",
+                detail=self._running_detail(typing_seconds, reply_to, line.reply_to),
+                reply_to_msg_id=reply_to,
             )
             conversation_job_store.update_line_result(
                 job_id,
@@ -144,13 +154,16 @@ class ConversationRunner:
                 error_lines=error_count,
             )
 
-            reply_to = self._resolve_reply_to(
-                line,
-                sent_ids,
-                previous_speaker_id,
-                previous_message_id,
-                script.reply_on_speaker_change,
-            )
+            if typing_seconds > 0:
+                await self._typing_with_stop(
+                    job_id,
+                    phone,
+                    peer_id,
+                    typing_seconds,
+                )
+                if conversation_job_store.should_stop(job_id):
+                    conversation_job_store.mark_finished(job_id, "stopped")
+                    return
 
             send_result = await self._send_with_flood_retry(
                 phone,
@@ -179,7 +192,13 @@ class ConversationRunner:
                     status="success",
                     message_id=message_id if isinstance(message_id, int) else None,
                     reply_to_msg_id=reply_to,
-                    detail=send_result.get("message") or "Da gui",
+                    detail=self._success_detail(
+                        send_result.get("message") or "",
+                        message_id if isinstance(message_id, int) else None,
+                        reply_to,
+                        line.reply_to,
+                        typing_seconds=typing_seconds,
+                    ),
                 )
                 completed += 1
                 success_count += 1
@@ -190,7 +209,11 @@ class ConversationRunner:
                     phone=phone,
                     status="error",
                     reply_to_msg_id=reply_to,
-                    detail=send_result.get("message") or "Gui that bai",
+                    detail=self._error_detail(
+                        send_result.get("message") or "",
+                        reply_to,
+                        line.reply_to,
+                    ),
                 )
                 completed += 1
                 error_count += 1
@@ -216,12 +239,91 @@ class ConversationRunner:
                 speaker_changed = line.speaker_id != next_line.speaker_id
                 delay_seconds = self._pick_delay(script, speaker_changed)
                 if delay_seconds > 0:
+                    next_speaker = speakers.get(next_line.speaker_id)
+                    wait_result = ConversationLineResult(
+                        line_id=next_line.id,
+                        speaker_id=next_line.speaker_id,
+                        phone=next_speaker.phone.strip() if next_speaker else "",
+                        status="pending",
+                        detail=self._wait_detail(delay_seconds, speaker_changed),
+                    )
+                    conversation_job_store.update_line_result(
+                        job_id,
+                        wait_result,
+                        completed_lines=completed,
+                        success_lines=success_count,
+                        error_lines=error_count,
+                    )
                     await self._sleep_with_stop(job_id, delay_seconds)
 
         conversation_job_store.mark_finished(
             job_id,
             self._resolve_final_status(job_id, error_count),
         )
+
+    @staticmethod
+    def _running_detail(
+        typing_seconds: int,
+        reply_to_msg_id: int | None,
+        reply_to_line: int | None,
+    ) -> str:
+        parts: list[str] = []
+        if typing_seconds > 0:
+            parts.append(f"Dang go ({typing_seconds}s)...")
+        else:
+            parts.append("Dang gui...")
+        if reply_to_line is not None:
+            parts.append(f"Tra loi dong #{reply_to_line}")
+        elif reply_to_msg_id is not None:
+            parts.append(f"Reply TG #{reply_to_msg_id}")
+        return " · ".join(parts)
+
+    @staticmethod
+    def _wait_detail(delay_seconds: int, speaker_changed: bool) -> str:
+        kind = "doi nguoi" if speaker_changed else "cung nguoi"
+        return f"Cho delay ({delay_seconds}s) — {kind}"
+
+    @staticmethod
+    def _success_detail(
+        base_message: str,
+        message_id: int | None,
+        reply_to_msg_id: int | None,
+        reply_to_line: int | None,
+        *,
+        typing_seconds: int = 0,
+    ) -> str:
+        parts: list[str] = []
+        normalized = str(base_message or "").strip().lower()
+        if reply_to_line is not None:
+            parts.append(f"Tra loi dong #{reply_to_line}")
+        elif reply_to_msg_id is not None or "tra loi" in normalized:
+            parts.append("Da tra loi tin nhan")
+        elif normalized not in ("da gui tin nhan", "da gui", ""):
+            parts.append(str(base_message).strip())
+        else:
+            parts.append("Da gui tin nhan")
+        if typing_seconds > 0:
+            parts.append(f"Go {typing_seconds}s")
+        if message_id is not None:
+            parts.append(f"TG #{message_id}")
+        if reply_to_msg_id is not None and reply_to_line is None:
+            parts.append(f"Reply TG #{reply_to_msg_id}")
+        return " · ".join(parts)
+
+    @staticmethod
+    def _error_detail(
+        message: str,
+        reply_to_msg_id: int | None,
+        reply_to_line: int | None,
+    ) -> str:
+        parts: list[str] = []
+        detail = str(message or "").strip() or "Gui that bai"
+        parts.append(detail)
+        if reply_to_line is not None:
+            parts.append(f"Tra loi dong #{reply_to_line}")
+        elif reply_to_msg_id is not None:
+            parts.append(f"Reply TG #{reply_to_msg_id}")
+        return " · ".join(parts)
 
     @staticmethod
     def _resolve_final_status(job_id: int, error_count: int) -> str:
@@ -310,6 +412,36 @@ class ConversationRunner:
         if low > high:
             low, high = high, low
         return random.randint(low, high)
+
+    @staticmethod
+    def _pick_typing_delay(script: ConversationScriptInput) -> int:
+        timing = script.timing
+        low = timing.typing_min_sec
+        high = timing.typing_max_sec
+        if high <= 0:
+            return 0
+        if low > high:
+            low, high = high, low
+        return random.randint(low, high)
+
+    async def _typing_with_stop(
+        self,
+        job_id: int,
+        phone: str,
+        peer_id: str,
+        seconds: int,
+    ) -> None:
+        elapsed = 0.0
+        last_ping = -10.0
+        while elapsed < seconds:
+            if conversation_job_store.should_stop(job_id):
+                return
+            if elapsed - last_ping >= 4.0:
+                await telegram_message_service.send_typing(phone, peer_id)
+                last_ping = elapsed
+            step = min(0.5, seconds - elapsed)
+            await asyncio.sleep(step)
+            elapsed += step
 
     async def _sleep_with_stop(self, job_id: int, seconds: int) -> None:
         elapsed = 0.0

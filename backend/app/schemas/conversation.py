@@ -14,6 +14,8 @@ class ConversationTimingInput(BaseModel):
     delay_max_sec: int = Field(default=12, ge=0, le=600)
     speaker_change_delay_min_sec: int = Field(default=8, ge=0, le=900)
     speaker_change_delay_max_sec: int = Field(default=20, ge=0, le=900)
+    typing_min_sec: int = Field(default=2, ge=0, le=120)
+    typing_max_sec: int = Field(default=6, ge=0, le=120)
 
 
 class ConversationLineInput(BaseModel):
@@ -121,6 +123,10 @@ class ConversationJobCreateRequest(BaseModel):
         default=None,
         ge=1,
         description="Chi chay tu dong co id >= start_line_id",
+    )
+    carried_line_results: list[ConversationLineResult] = Field(
+        default_factory=list,
+        description="Giu ket qua da gui tu job truoc khi chay tu start_line_id",
     )
 
 
