@@ -300,16 +300,14 @@ export function AccountPickerPanel({
               if (selectionMode === 'multiple') {
                 return (
                   <li key={phone} role="option" aria-selected={selected}>
-                    <label
+                    <button
+                      type="button"
+                      role="checkbox"
+                      aria-checked={selected}
                       className={`acc-picker-item${selected ? ' acc-picker-item--selected' : ''}`}
+                      onClick={() => togglePhone(phone)}
+                      disabled={disabled}
                     >
-                      <input
-                        type="checkbox"
-                        className="acc-picker-input"
-                        checked={selected}
-                        onChange={() => togglePhone(phone)}
-                        disabled={disabled}
-                      />
                       <span
                         className={`acc-picker-indicator acc-picker-indicator--check${selected ? ' acc-picker-indicator--on' : ''}`}
                         aria-hidden
@@ -332,7 +330,7 @@ export function AccountPickerPanel({
                       ) : (
                         <span className="acc-picker-muted">—</span>
                       )}
-                    </label>
+                    </button>
                   </li>
                 )
               }

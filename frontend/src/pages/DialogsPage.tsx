@@ -13,7 +13,7 @@ import { MessagePollBlock } from '../components/MessagePollBlock'
 import { MessageReactionBar } from '../components/MessageReactionBar'
 import { MessageReplyQuote } from '../components/MessageReplyQuote'
 import { MessageText } from '../components/MessageText'
-import { PhoneSelect } from '../components/PhoneSelect'
+import { DialogsAccountSelect } from '../components/DialogsAccountSelect'
 import { useSessionAccounts } from '../hooks/useSessionAccounts'
 import { PinnedMessagesBar } from '../components/PinnedMessagesBar'
 import { PinnedMessagesPanel } from '../components/PinnedMessagesPanel'
@@ -60,6 +60,15 @@ const FILTER_OPTIONS: { id: KindFilter; label: string }[] = [
   { id: 'group', label: 'Group' },
   { id: 'channel', label: 'Channel' },
 ]
+
+const DIALOGS_FETCH_LIMIT = 500
+
+function dialogsLoadSuccessMessage(total: number, limit = DIALOGS_FETCH_LIMIT): string {
+  if (total >= limit) {
+    return `Tải ${total} chat (tối đa ${limit}/lần — chat cũ hơn có thể chưa hiện)`
+  }
+  return `Tải ${total} chat`
+}
 
 function kindLabel(kind: string): string {
   const map: Record<string, string> = {
@@ -111,7 +120,6 @@ export function DialogsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const accounts = useSessionAccounts()
   const [phone, setPhone] = useState(() => searchParams.get('phone')?.trim() ?? '')
-  const urlAutoLoadRef = useRef('')
   const [dialogs, setDialogs] = useState<DialogItem[]>([])
   const [counts, setCounts] = useState<DialogCounts | null>(null)
   const [selected, setSelected] = useState<DialogItem | null>(null)
@@ -765,12 +773,7 @@ export function DialogsPage() {
     setSuccess('')
   }
 
-  const loadDialogs = useCallback(async (targetPhone: string) => {
-    const activePhone = targetPhone.trim()
-    if (!activePhone) return
-
-    setLoadingDialogs(true)
-    resetAlerts()
+  function resetDialogsView() {
     setDialogs([])
     setCounts(null)
     setSelected(null)
@@ -780,12 +783,24 @@ export function DialogsPage() {
     setMessagesTitle('')
     setReactionsPolicy(null)
     setReplyTo(null)
+    setSearch('')
+    setFilter('all')
+    setUnreadOnly(false)
     setUnreadDividerAfterId(null)
     setStreamMinId(0)
     setServerSearchResults([])
     setLoadedPhotoIds(new Set())
+    resetAlerts()
+  }
+
+  const loadDialogs = useCallback(async (targetPhone: string) => {
+    const activePhone = targetPhone.trim()
+    if (!activePhone) return
+
+    setLoadingDialogs(true)
+    resetDialogsView()
     try {
-      const res = await api.listDialogs(activePhone)
+      const res = await api.listDialogs(activePhone, DIALOGS_FETCH_LIMIT)
       if (!res.success || !res.data) {
         setError(res.error ?? 'Không tải được danh sách chat')
         return
@@ -796,7 +811,9 @@ export function DialogsPage() {
       }
       setDialogs(mergeDialogsWithReadState(activePhone, res.data.dialogs))
       setCounts(res.data.counts)
-      setSuccess(`Tải ${res.data.total} chat`)
+      setSuccess(
+        dialogsLoadSuccessMessage(res.data.total, res.data.limit ?? DIALOGS_FETCH_LIMIT),
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Không kết nối được API.')
     } finally {
@@ -804,25 +821,15 @@ export function DialogsPage() {
     }
   }, [])
 
-  const handlePhoneChange = useCallback(
-    (next: string) => {
-      setPhone(next)
-      urlAutoLoadRef.current = ''
-      const params = new URLSearchParams(searchParams)
-      const trimmed = next.trim()
-      if (trimmed) params.set('phone', trimmed)
-      else params.delete('phone')
-      setSearchParams(params, { replace: true })
-    },
-    [searchParams, setSearchParams],
-  )
+  const handlePhoneChange = useCallback((next: string) => {
+    if (next === phone) return
+    setPhone(next)
+    resetDialogsView()
+  }, [phone])
 
   useEffect(() => {
     const phoneParam = searchParams.get('phone')?.trim() ?? ''
-    if (!phoneParam) {
-      urlAutoLoadRef.current = ''
-      return
-    }
+    if (!phoneParam) return
     if (accounts.loading) return
 
     if (!accounts.sessions.includes(phoneParam)) {
@@ -831,11 +838,7 @@ export function DialogsPage() {
     }
 
     setPhone((current) => (current === phoneParam ? current : phoneParam))
-
-    if (urlAutoLoadRef.current === phoneParam) return
-    urlAutoLoadRef.current = phoneParam
-    void loadDialogs(phoneParam)
-  }, [searchParams, accounts.loading, accounts.sessions, loadDialogs])
+  }, [searchParams, accounts.loading, accounts.sessions])
 
   function clearSelectedMedia() {
     if (mediaPreview) URL.revokeObjectURL(mediaPreview)
@@ -870,7 +873,7 @@ export function DialogsPage() {
     if (!phone) return
     if (!quiet) setRefreshingDialogs(true)
     try {
-      const res = await api.listDialogs(phone)
+      const res = await api.listDialogs(phone, DIALOGS_FETCH_LIMIT)
       if (!res.success || !res.data || res.data.status === 'error') return
       const merged = mergeDialogsWithReadState(phone, res.data.dialogs)
       setDialogs(merged)
@@ -1387,7 +1390,6 @@ export function DialogsPage() {
 
   async function handleLoadDialogs(e: React.FormEvent) {
     e.preventDefault()
-    urlAutoLoadRef.current = phone.trim()
     const params = new URLSearchParams(searchParams)
     const trimmed = phone.trim()
     if (trimmed) params.set('phone', trimmed)
@@ -1965,33 +1967,33 @@ export function DialogsPage() {
     <div className={`page page--dialogs${chatActive ? ' page--dialogs-active' : ''}`}>
       <section className="dialogs-session-card">
         <form
-          className="dialogs-load-bar"
+          className="dialogs-session-toolbar"
           onSubmit={(e) => void handleLoadDialogs(e)}
         >
-          <PhoneSelect
+          <DialogsAccountSelect
             value={phone}
             onChange={handlePhoneChange}
-            allowManual={false}
             sessions={accounts.sessions}
-            metaByPhone={accounts.metaByPhone}
+            getMeta={accounts.getMeta}
             loading={accounts.loading}
+            disabled={loadingDialogs}
           />
           <button
             type="submit"
-            className="btn btn--primary"
+            className="btn btn--primary dialogs-load-btn"
             disabled={loadingDialogs || !phone}
           >
             {loadingDialogs ? 'Đang tải…' : 'Tải chat'}
           </button>
         </form>
-        {counts && (
+        {counts ? (
           <div className="dialog-stat-chips">
             <span className={countChipClass('private')}>Private {counts.private}</span>
             <span className={countChipClass('bot')}>Bot {counts.bot}</span>
             <span className={countChipClass('group')}>Group {counts.group}</span>
             <span className={countChipClass('channel')}>Channel {counts.channel}</span>
           </div>
-        )}
+        ) : null}
       </section>
 
       <Alert type="error" message={error} />
@@ -2002,7 +2004,7 @@ export function DialogsPage() {
           <ChatEmptyIcon />
           <h2>Bắt đầu trò chuyện</h2>
           <p className="muted">
-            Chọn session và bấm <strong>Tải chat</strong> để mở danh sách hội thoại.
+            Chọn tài khoản và bấm <strong>Tải chat</strong> để mở danh sách hội thoại.
           </p>
         </section>
       )}
@@ -2011,7 +2013,8 @@ export function DialogsPage() {
         <section className="dialogs-layout dialogs-workspace">
           <div className="dialogs-list-panel">
             <div className="dialogs-list-head">
-              <div>
+              <div className="dialogs-list-head-main">
+                <span className="dialogs-panel-kicker">Danh sách</span>
                 <h2>Hội thoại</h2>
                 <p className="dialogs-list-sub">
                   {filteredDialogs.length} / {dialogs.length} chat
@@ -2019,12 +2022,25 @@ export function DialogsPage() {
               </div>
               <button
                 type="button"
-                className="btn btn--sm btn--ghost"
+                className="dialogs-refresh-btn"
                 disabled={refreshingDialogs || !phone}
                 onClick={() => void refreshDialogsList()}
                 title="Làm mới danh sách chat"
+                aria-label="Làm mới danh sách chat"
               >
-                {refreshingDialogs ? '…' : '↻'}
+                {refreshingDialogs ? (
+                  <span className="spinner dialogs-refresh-spinner" aria-hidden />
+                ) : (
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" aria-hidden>
+                    <path
+                      d="M20 12a8 8 0 1 1-2.34-5.66M20 4v6h-6"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
               </button>
             </div>
 
@@ -2096,17 +2112,19 @@ export function DialogsPage() {
                           )}
                         </span>
                       </div>
+                      <div className="dialog-item-meta">
+                        <span className={kindBadgeClass(dialog.kind)}>
+                          {kindLabel(dialog.kind)}
+                        </span>
+                      </div>
                       <div className="dialog-item-bottom">
                         <p className="dialog-preview">
                           {dialog.last_message || 'Không có tin nhắn'}
                         </p>
-                        {dialog.unread_count > 0 && (
+                        {dialog.unread_count > 0 ? (
                           <span className="dialog-unread">{dialog.unread_count}</span>
-                        )}
+                        ) : null}
                       </div>
-                      <span className={kindBadgeClass(dialog.kind)}>
-                        {kindLabel(dialog.kind)}
-                      </span>
                     </div>
                   </button>
                 </li>
@@ -2114,7 +2132,9 @@ export function DialogsPage() {
             </ul>
 
             {filteredDialogs.length === 0 && (
-              <p className="muted dialogs-empty">Không có chat khớp bộ lọc.</p>
+              <div className="dialogs-empty">
+                <p className="muted">Không có chat khớp bộ lọc.</p>
+              </div>
             )}
           </div>
 
@@ -2298,9 +2318,10 @@ export function DialogsPage() {
 
             <div className="chat-body">
               {!selected && (
-                <div className="empty-state empty-state--chat">
+                <div className="empty-state empty-state--chat empty-state--chat-pick">
                   <ChatEmptyIcon />
-                  <p>Chọn một cuộc trò chuyện để xem tin nhắn</p>
+                  <h3 className="empty-state-title">Tin nhắn</h3>
+                  <p>Chọn một hội thoại bên trái để bắt đầu đọc và trả lời.</p>
                 </div>
               )}
 

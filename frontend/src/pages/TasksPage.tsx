@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { Link } from 'react-router-dom'
 import './TasksPage.css'
 import { api } from '../api/client'
 import { AccountPickerPanel, type AccountPickerFilterState } from '../components/AccountPickerPanel'
-import { resolveAccountStatus } from '../utils/accountPicker'
+import { TaskDelayField } from '../components/TaskDelayField'
+import { validateBulkDelay } from '../utils/bulkDelay'
+import { TasksJoinConfig } from '../components/TasksJoinConfig'
+
 import { Alert } from '../components/Alert'
 import type { PollInfoData, PollOptionItem } from '../types/api'
 import { useSessionAccounts } from '../hooks/useSessionAccounts'
@@ -13,6 +17,7 @@ import {
 } from '../utils/chatMedia'
 import { DEFAULT_QUICK_REACTIONS } from '../utils/reactions'
 
+import { resolveAccountStatus } from '../utils/accountPicker'
 import {
   actionsForGroup,
   getActionMeta,
@@ -89,8 +94,45 @@ function pollCancelWarnings(info: PollInfoData): string[] {
 }
 
 type TodoCancelMode = 'all' | 'pick'
+
+const TASK_GROUP_THEME: Record<
+  TaskActionGroup,
+  { accent: string; soft: string; border: string; glow: string }
+> = {
+  groups: {
+    accent: '#2481cc',
+    soft: 'rgba(36, 129, 204, 0.08)',
+    border: 'rgba(36, 129, 204, 0.28)',
+    glow: 'rgba(36, 129, 204, 0.14)',
+  },
+  messages: {
+    accent: '#7c3aed',
+    soft: 'rgba(124, 58, 237, 0.08)',
+    border: 'rgba(124, 58, 237, 0.28)',
+    glow: 'rgba(124, 58, 237, 0.14)',
+  },
+  reactions: {
+    accent: '#16a34a',
+    soft: 'rgba(22, 163, 74, 0.08)',
+    border: 'rgba(22, 163, 74, 0.28)',
+    glow: 'rgba(22, 163, 74, 0.14)',
+  },
+  polls: {
+    accent: '#d97706',
+    soft: 'rgba(217, 119, 6, 0.08)',
+    border: 'rgba(217, 119, 6, 0.28)',
+    glow: 'rgba(217, 119, 6, 0.14)',
+  },
+  pipelines: {
+    accent: '#db2777',
+    soft: 'rgba(219, 39, 119, 0.08)',
+    border: 'rgba(219, 39, 119, 0.28)',
+    glow: 'rgba(219, 39, 119, 0.14)',
+  },
+}
+
 export function TasksPage() {
-  const { sessions, loading: sessionsLoading, reload, getPickerLabel, getMeta, metaByPhone } =
+  const { sessions, loading: sessionsLoading, getPickerLabel, getMeta, metaByPhone } =
     useSessionAccounts()
   const [accountFilterState, setAccountFilterState] = useState<AccountPickerFilterState>({
     filteredCount: 0,
@@ -108,11 +150,7 @@ export function TasksPage() {
   const [delayMinSeconds, setDelayMinSeconds] = useState(3)
   const [delayMaxSeconds, setDelayMaxSeconds] = useState(8)
   const [useRandomDelay, setUseRandomDelay] = useState(false)
-  const [retryAttempts, setRetryAttempts] = useState(1)
-  const [stopAfterConsecutiveErrors, setStopAfterConsecutiveErrors] = useState(0)
-  const [preCheckLive, setPreCheckLive] = useState(true)
   const [pipelineStepDelaySeconds, setPipelineStepDelaySeconds] = useState(3)
-  const [showRunOptions, setShowRunOptions] = useState(false)
 
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<TaskProgressRow[]>([])
@@ -135,11 +173,6 @@ export function TasksPage() {
 
   const hasStatusData = metaByPhone.size > 0
 
-  const activeCount = useMemo(
-    () => sessions.filter((phone) => resolveAccountStatus(getMeta(phone)) === 'active').length,
-    [sessions, getMeta],
-  )
-
   const accountPickerMeta = useMemo(() => {
     if (sessionsLoading || sessions.length === 0) return 'Chọn acc để chạy bulk'
     if (accountFilterState.hasFilters) {
@@ -154,6 +187,8 @@ export function TasksPage() {
     () => sessions.filter((phone) => selectedPhones.has(phone)),
     [sessions, selectedPhones],
   )
+  const selectedCount = selectedPhones.size
+  const isMultiAcc = selectedCount > 1
 
   const pollPreviewPhone = selectedList[0] ?? sessions[0] ?? ''
 
@@ -253,6 +288,12 @@ export function TasksPage() {
     [pollInfo],
   )
 
+  const activeCount = useMemo(
+    () =>
+      sessions.filter((phone) => resolveAccountStatus(getMeta(phone)) === 'active').length,
+    [sessions, getMeta],
+  )
+
   const progressStats = useMemo(() => {
     const done = progress.filter((row) => row.status === 'success').length
     const failed = progress.filter((row) => row.status === 'error').length
@@ -262,23 +303,6 @@ export function TasksPage() {
     const pct = total > 0 ? Math.round((done / total) * 100) : 0
     return { done, failed, skipped, runningCount, total, pct }
   }, [progress])
-
-  const loadSessions = useCallback(async () => {
-    setError('')
-    try {
-      const result = await reload()
-      if (!result) return
-      setSelectedPhones((prev) => {
-        const next = new Set<string>()
-        for (const phone of result.sessions) {
-          if (prev.has(phone)) next.add(phone)
-        }
-        return next
-      })
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Không kết nối được API.')
-    }
-  }, [reload])
 
   useEffect(() => {
     setSelectedPhones((prev) => {
@@ -517,8 +541,14 @@ export function TasksPage() {
     if (actionMeta.needsText && !text.trim()) return 'Nhập nội dung tin nhắn'
     if (actionMeta.needsMedia && !mediaFile) return 'Chọn file media để gửi'
 
-    if (useRandomDelay && delayMinSeconds > delayMaxSeconds) {
-      return 'Delay min phải ≤ max'
+    if (isMultiAcc) {
+      const delayError = validateBulkDelay({
+        useRandomDelay,
+        delaySeconds,
+        delayMinSeconds,
+        delayMaxSeconds,
+      })
+      if (delayError) return delayError
     }
 
     return null
@@ -555,9 +585,9 @@ export function TasksPage() {
         delayMinSeconds,
         delayMaxSeconds,
         useRandomDelay,
-        retryAttempts,
-        stopAfterConsecutiveErrors,
-        preCheckLive,
+        retryAttempts: 0,
+        stopAfterConsecutiveErrors: 0,
+        preCheckLive: false,
         pipelineStepDelaySeconds,
         voteMessageId:
           action === 'vote-poll' || action === 'cancel-vote-poll'
@@ -598,158 +628,209 @@ export function TasksPage() {
     abortRef.current?.abort()
   }
 
-  const currentStep =
-    selectedList.length === 0 ? 1 : action === 'leave-all' || targetLink.trim() ? 3 : 2
-
   const needsTextField = actionMeta.needsText || action === 'send-media'
+  const groupTheme = TASK_GROUP_THEME[actionGroup]
+  const groupThemeStyle = {
+    '--task-accent': groupTheme.accent,
+    '--task-soft': groupTheme.soft,
+    '--task-border': groupTheme.border,
+    '--task-glow': groupTheme.glow,
+  } as CSSProperties
+
+  const progressRingStyle = {
+    '--ring-pct': progressStats.pct,
+  } as CSSProperties
+
+  const delaySummary = useRandomDelay
+    ? `${delayMinSeconds}–${delayMaxSeconds}s`
+    : `${delaySeconds}s`
 
   return (
-    <div className="page page--tasks page--tasks-active">
-      <header className="panel tasks-hero">
-        <div className="tasks-hero-main">
-          <span className="tasks-page-kicker">Bulk automation</span>
-          <h1>Tác vụ hàng loạt</h1>
-          <p className="page-desc">
-            Chọn acc, cấu hình hành động và chạy lần lượt — react, vote, reply, gửi tin,
-            join/leave.
-          </p>
-        </div>
-        <div className="tasks-hero-metrics" aria-label="Thống kê nhanh">
-          <div className="tasks-metric">
-            <span className="tasks-metric-value">
-              {sessionsLoading ? '—' : sessions.length}
-            </span>
-            <span className="tasks-metric-label">Sessions</span>
-          </div>
-          <div className="tasks-metric tasks-metric--accent">
-            <span className="tasks-metric-value">{selectedList.length}</span>
-            <span className="tasks-metric-label">Đã chọn</span>
-          </div>
-          <div className="tasks-metric">
-            <span className="tasks-metric-value">{hasStatusData ? activeCount : '—'}</span>
-            <span className="tasks-metric-label">Live</span>
-          </div>
-          <div className="tasks-metric">
-            <span className="tasks-metric-value">
-              {progress.length > 0 ? `${progressStats.done}/${progressStats.total}` : '—'}
-            </span>
-            <span className="tasks-metric-label">Tiến trình</span>
-          </div>
-        </div>
-        <button
-          type="button"
-          className="btn btn--ghost tasks-hero-reload"
-          onClick={() => void loadSessions()}
-          disabled={sessionsLoading || running}
-        >
-          {sessionsLoading ? 'Đang tải…' : 'Tải lại acc'}
-        </button>
-      </header>
-
+    <div className="page page--tasks">
       <Alert type="error" message={error} />
       <Alert type="success" message={success} />
 
       <div className="tasks-workspace">
-        <div className="tasks-workspace-row">
-        <AccountPickerPanel
-          className="tasks-sidebar tasks-accounts-panel"
-          title="Tài khoản"
-          meta={accountPickerMeta}
-          badgeCount={selectedList.length}
-          sessions={sessions}
-          loading={sessionsLoading}
-          getMeta={getMeta}
-          selectionMode="multiple"
-          selectedPhones={selectedPhones}
-          onSelectedPhonesChange={setSelectedPhones}
-          disabled={running}
-          busy={running}
-          showSelectActivePill
-          hasStatusData={hasStatusData}
-          showClearFiltersInToolbar
-          bodyBordered={false}
-          onFiltersChange={setAccountFilterState}
-        />
+        <div className="tasks-workspace-top">
+          <AccountPickerPanel
+            className="tasks-accounts-panel"
+            title="Tài khoản"
+            meta={accountPickerMeta}
+            badgeCount={selectedList.length}
+            sessions={sessions}
+            loading={sessionsLoading}
+            getMeta={getMeta}
+            selectionMode="multiple"
+            selectedPhones={selectedPhones}
+            onSelectedPhonesChange={setSelectedPhones}
+            disabled={running}
+            busy={running}
+            showSelectActivePill
+            hasStatusData={hasStatusData}
+            showClearFiltersInToolbar
+            bodyBordered={false}
+            onFiltersChange={setAccountFilterState}
+            panelFoot={
+              <>
+                Chưa có session? Thêm tại <Link to="/sessions">Sessions</Link>.
+              </>
+            }
+          />
 
-          <section className="panel tasks-config tasks-workflow-panel">
-            <nav className="tasks-stepper" aria-label="Các bước thực hiện">
-              <div
-                className={`tasks-stepper-item${currentStep >= 1 ? ' is-active' : ''}${currentStep > 1 ? ' is-done' : ''}`}
-              >
-                <span className="tasks-stepper-num">1</span>
-                <span className="tasks-stepper-label">Tài khoản</span>
+          <section className="panel task-composer">
+            <header className="task-composer__head">
+              <div className="task-composer__head-main">
+                <h2>Tác vụ hàng loạt</h2>
+                <p className="task-composer__head-desc muted">
+                  Chọn acc, hành động và chạy lần lượt.
+                </p>
               </div>
-              <span className="tasks-stepper-line" aria-hidden />
-              <div
-                className={`tasks-stepper-item${currentStep >= 2 ? ' is-active' : ''}${currentStep > 2 ? ' is-done' : ''}`}
-              >
-                <span className="tasks-stepper-num">2</span>
-                <span className="tasks-stepper-label">Cấu hình</span>
-              </div>
-              <span className="tasks-stepper-line" aria-hidden />
-              <div className={`tasks-stepper-item${currentStep >= 3 ? ' is-active' : ''}`}>
-                <span className="tasks-stepper-num">3</span>
-                <span className="tasks-stepper-label">Chạy</span>
-              </div>
-            </nav>
 
-          <div className="tasks-category-bar" role="tablist" aria-label="Nhóm hành động">
-            {TASK_ACTION_GROUPS.map((group) => (
-              <button
-                key={group.id}
-                type="button"
-                role="tab"
-                aria-selected={actionGroup === group.id}
-                className={`tasks-category-tab${actionGroup === group.id ? ' tasks-category-tab--active' : ''}`}
-                disabled={running}
-                onClick={() => selectCategory(group.id)}
-              >
-                {group.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="tasks-action-grid">
-            {groupActions.map((item) => {
-              const disabled = isActionDisabled(item.id)
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`tasks-action-card${action === item.id ? ' tasks-action-card--active' : ''}${disabled ? ' tasks-action-card--disabled' : ''}`}
-                  disabled={running || disabled}
-                  onClick={() => selectAction(item.id)}
-                  title={disabled ? 'Link hiện tại không hỗ trợ' : item.hint}
-                >
-                  <span className="tasks-action-card-icon" aria-hidden>
-                    {item.icon}
+              <div className="task-composer__stats" aria-label="Tổng quan">
+                <div className="task-composer__stat">
+                  <span className="task-composer__stat-value">
+                    {sessionsLoading ? '—' : sessions.length}
                   </span>
-                  <span className="tasks-action-card-label">{item.label}</span>
-                  {item.isPipeline ? (
-                    <span className="tasks-action-card-badge">2 bước</span>
-                  ) : null}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="tasks-config-scroll tasks-workflow-body">
-            <div className="tasks-action-summary">
-              <span className="tasks-action-summary-icon" aria-hidden>
-                {actionMeta.icon}
-              </span>
-              <div>
-                <p className="tasks-action-summary-title">{actionMeta.label}</p>
-                <p className="tasks-action-hint">{actionMeta.hint}</p>
+                  <span className="task-composer__stat-label">Sessions</span>
+                </div>
+                <div className="task-composer__stat task-composer__stat--accent">
+                  <span className="task-composer__stat-value">{selectedList.length}</span>
+                  <span className="task-composer__stat-label">Đã chọn</span>
+                </div>
+                <div className="task-composer__stat">
+                  <span className="task-composer__stat-value">
+                    {hasStatusData ? activeCount : '—'}
+                  </span>
+                  <span className="task-composer__stat-label">Live</span>
+                </div>
+                <div
+                  className={`task-composer__stat${
+                    progressStats.done > 0 ? ' task-composer__stat--success' : ''
+                  }`}
+                >
+                  <span className="task-composer__stat-value">
+                    {progress.length > 0 ? progressStats.done : '—'}
+                  </span>
+                  <span className="task-composer__stat-label">Xong</span>
+                </div>
+                <div
+                  className={`task-composer__stat${
+                    progressStats.failed > 0 ? ' task-composer__stat--error' : ''
+                  }`}
+                >
+                  <span className="task-composer__stat-value">
+                    {progress.length > 0 ? progressStats.failed : '—'}
+                  </span>
+                  <span className="task-composer__stat-label">Lỗi</span>
+                </div>
+                <div className="task-composer__stat">
+                  <span className="task-composer__stat-value">
+                    {progress.length > 0 ? progressStats.skipped : '—'}
+                  </span>
+                  <span className="task-composer__stat-label">Bỏ qua</span>
+                </div>
               </div>
-            </div>
+            </header>
 
-            {actionMeta.requiresLink ? (
+            <div className="task-composer__body">
+              <section
+                className="task-section task-section--action"
+                style={groupThemeStyle}
+                aria-label="Chọn hành động"
+              >
+                <div className="task-section__head">
+                  <h3>Hành động</h3>
+                  <p className="task-section__meta muted">
+                    {TASK_ACTION_GROUPS.find((group) => group.id === actionGroup)?.label}
+                  </p>
+                </div>
+
+                <div className="task-category-pills" role="tablist" aria-label="Nhóm hành động">
+                  {TASK_ACTION_GROUPS.map((group) => (
+                    <button
+                      key={group.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={actionGroup === group.id}
+                      className={`task-category-pill${actionGroup === group.id ? ' task-category-pill--active' : ''}`}
+                      disabled={running}
+                      onClick={() => selectCategory(group.id)}
+                    >
+                      {group.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="task-action-grid">
+                  {groupActions.map((item) => {
+                    const disabled = isActionDisabled(item.id)
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`task-action-card${action === item.id ? ' task-action-card--active' : ''}${disabled ? ' task-action-card--disabled' : ''}`}
+                        disabled={running || disabled}
+                        onClick={() => selectAction(item.id)}
+                        title={disabled ? 'Link hiện tại không hỗ trợ' : item.hint}
+                      >
+                        <span className="task-action-card__icon" aria-hidden>
+                          {item.icon}
+                        </span>
+                        <span className="task-action-card__label">{item.label}</span>
+                        {item.isPipeline ? (
+                          <span className="task-action-card__badge">2 bước</span>
+                        ) : null}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <p className="task-action-hint task-action-hint--compact">
+                  <span className="task-action-hint__icon" aria-hidden>
+                    {actionMeta.icon}
+                  </span>
+                  <span className="muted">{actionMeta.hint}</span>
+                </p>
+              </section>
+
+              <section
+                className={`task-section task-section--config${action === 'join' ? ' task-section--join' : ''}`}
+                aria-label={action === 'join' ? 'Cấu hình join' : 'Cấu hình tác vụ'}
+              >
+                <div className="task-section__head">
+                  <h3>{action === 'join' ? 'Join nhóm' : 'Cấu hình'}</h3>
+                  <p className="task-section__meta muted">
+                    {action === 'join'
+                      ? selectedList.length > 0
+                        ? isMultiAcc
+                          ? `${selectedList.length} acc · ${delaySummary}`
+                          : `${selectedList.length} acc`
+                        : 'Chọn acc bên trái'
+                      : isMultiAcc
+                        ? `${selectedList.length} acc · delay ${delaySummary}`
+                        : `${selectedList.length} acc`}
+                  </p>
+                </div>
+
+                <div
+                  className={`task-config-fields task-config-card${
+                    action === 'join' ? ' task-config-card--join' : ''
+                  }${action === 'join' && !isMultiAcc ? ' task-config-card--join-single' : ''}`}
+                >
+            {action === 'join' ? (
+              <TasksJoinConfig
+                targetLink={targetLink}
+                onTargetLinkChange={setTargetLink}
+                parsedLink={parsedLink}
+                disabled={running}
+              />
+            ) : actionMeta.requiresLink ? (
               <>
                 <label className="field tasks-field">
-                  <span>Link mục tiêu</span>
+                  <span className="tasks-field__label">Link mục tiêu</span>
                   <input
                     type="url"
+                    className="tasks-input"
                     placeholder="https://t.me/channel/123 hoặc https://t.me/+invite"
                     value={targetLink}
                     onChange={(e) => setTargetLink(e.target.value)}
@@ -1165,8 +1246,8 @@ export function TasksPage() {
             ) : null}
 
             {needsTextField ? (
-              <label className="field tasks-field">
-                <span>
+              <label className="field tasks-field tasks-field--content">
+                <span className="tasks-field__label">
                   {action === 'send-media'
                     ? 'Caption (tùy chọn)'
                     : action === 'pipeline-join-send'
@@ -1176,6 +1257,7 @@ export function TasksPage() {
                         : 'Nội dung'}
                 </span>
                 <textarea
+                  className="tasks-textarea"
                   rows={4}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
@@ -1195,180 +1277,74 @@ export function TasksPage() {
               </label>
             ) : null}
 
-            {actionMeta.isPipeline ? (
-              <label className="field tasks-field tasks-field--inline">
-                <span>Delay giữa các bước pipeline</span>
-                <div className="tasks-delay-input">
-                  <input
-                    type="number"
-                    min={0}
-                    max={60}
-                    value={pipelineStepDelaySeconds}
-                    onChange={(e) =>
-                      setPipelineStepDelaySeconds(Number(e.target.value) || 0)
-                    }
-                    disabled={running}
-                  />
-                  <span className="tasks-delay-unit">giây</span>
-                </div>
-              </label>
-            ) : null}
-
-            <div className="tasks-run-options">
-              <button
-                type="button"
-                className="tasks-run-options-toggle"
-                onClick={() => setShowRunOptions((prev) => !prev)}
-                aria-expanded={showRunOptions}
-              >
-                <span>Tùy chọn chạy</span>
-                <span className="tasks-run-options-chevron">
-                  {showRunOptions ? '▾' : '▸'}
-                </span>
-              </button>
-
-              {showRunOptions ? (
-                <div className="tasks-run-options-body">
-                  <label className="tasks-option-check">
-                    <input
-                      type="checkbox"
-                      checked={preCheckLive}
-                      onChange={(e) => setPreCheckLive(e.target.checked)}
+                {isMultiAcc ? (
+                  <div className="task-config-delay">
+                    <TaskDelayField
+                      useRandomDelay={useRandomDelay}
+                      onUseRandomDelayChange={setUseRandomDelay}
+                      delaySeconds={delaySeconds}
+                      onDelaySecondsChange={setDelaySeconds}
+                      delayMinSeconds={delayMinSeconds}
+                      onDelayMinSecondsChange={setDelayMinSeconds}
+                      delayMaxSeconds={delayMaxSeconds}
+                      onDelayMaxSecondsChange={setDelayMaxSeconds}
+                      showPipelineDelay={actionMeta.isPipeline}
+                      pipelineStepDelaySeconds={pipelineStepDelaySeconds}
+                      onPipelineStepDelaySecondsChange={setPipelineStepDelaySeconds}
                       disabled={running}
                     />
-                    <span>Pre-check live trước khi chạy (bỏ qua acc die)</span>
-                  </label>
-
-                  <label className="tasks-option-check">
-                    <input
-                      type="checkbox"
-                      checked={useRandomDelay}
-                      onChange={(e) => setUseRandomDelay(e.target.checked)}
-                      disabled={running}
-                    />
-                    <span>Random delay giữa các acc</span>
-                  </label>
-
-                  {useRandomDelay ? (
-                    <div className="tasks-delay-range">
-                      <label className="field tasks-field tasks-field--inline">
-                        <span>Min</span>
-                        <div className="tasks-delay-input">
-                          <input
-                            type="number"
-                            min={0}
-                            max={120}
-                            value={delayMinSeconds}
-                            onChange={(e) =>
-                              setDelayMinSeconds(Number(e.target.value) || 0)
-                            }
-                            disabled={running}
-                          />
-                          <span className="tasks-delay-unit">s</span>
-                        </div>
-                      </label>
-                      <label className="field tasks-field tasks-field--inline">
-                        <span>Max</span>
-                        <div className="tasks-delay-input">
-                          <input
-                            type="number"
-                            min={0}
-                            max={120}
-                            value={delayMaxSeconds}
-                            onChange={(e) =>
-                              setDelayMaxSeconds(Number(e.target.value) || 0)
-                            }
-                            disabled={running}
-                          />
-                          <span className="tasks-delay-unit">s</span>
-                        </div>
-                      </label>
-                    </div>
-                  ) : (
-                    <label className="field tasks-field tasks-field--inline">
-                      <span>Delay giữa các acc</span>
-                      <div className="tasks-delay-input">
-                        <input
-                          type="number"
-                          min={0}
-                          max={120}
-                          value={delaySeconds}
-                          onChange={(e) => setDelaySeconds(Number(e.target.value) || 0)}
-                          disabled={running}
-                        />
-                        <span className="tasks-delay-unit">giây</span>
-                      </div>
-                    </label>
-                  )}
-
-                  <div className="tasks-option-row">
-                    <label className="field tasks-field tasks-field--inline">
-                      <span>Retry khi lỗi</span>
-                      <div className="tasks-delay-input">
-                        <input
-                          type="number"
-                          min={0}
-                          max={3}
-                          value={retryAttempts}
-                          onChange={(e) => setRetryAttempts(Number(e.target.value) || 0)}
-                          disabled={running}
-                        />
-                        <span className="tasks-delay-unit">lần</span>
-                      </div>
-                    </label>
-
-                    <label className="field tasks-field tasks-field--inline">
-                      <span>Dừng sau N lỗi liên tiếp</span>
-                      <div className="tasks-delay-input">
-                        <input
-                          type="number"
-                          min={0}
-                          max={20}
-                          value={stopAfterConsecutiveErrors}
-                          onChange={(e) =>
-                            setStopAfterConsecutiveErrors(Number(e.target.value) || 0)
-                          }
-                          disabled={running}
-                        />
-                        <span className="tasks-delay-unit">0 = tắt</span>
-                      </div>
-                    </label>
                   </div>
+                ) : null}
+                </div>
+              </section>
+            </div>
+
+            <footer className="task-composer__foot">
+              <div className="task-composer__summary">
+                <span className="task-composer__summary-title">
+                  {actionMeta.icon} {actionMeta.label}
+                </span>
+                <span className="task-composer__summary-meta muted">
+                  {selectedList.length} acc · {actionMeta.isPipeline ? '2 bước' : '1 bước'}
+                  {isMultiAcc ? ` · delay ${delaySummary}` : ''}
+                </span>
+              </div>
+
+              {progress.length > 0 || running ? (
+                <div
+                  className="task-composer__progress-ring"
+                  style={progressRingStyle}
+                  role="progressbar"
+                  aria-valuenow={progressStats.pct}
+                  aria-label={`Tiến trình ${progressStats.pct}%`}
+                >
+                  <span className="task-composer__progress-ring-label">{progressStats.pct}%</span>
                 </div>
               ) : null}
-            </div>
 
-          </div>
-
-          <div className="tasks-run-bar tasks-run-actions">
-            <div className="tasks-run-bar-summary">
-              <span className="tasks-run-bar-title">
-                {actionMeta.label}
-              </span>
-              <span className="tasks-run-bar-meta muted">
-                {selectedList.length} acc · {actionMeta.isPipeline ? '2 bước' : '1 bước'}
-              </span>
-            </div>
-            <button
-              type="button"
-              className="btn btn--primary"
-              onClick={() => void handleRun()}
-              disabled={running || selectedList.length === 0}
-            >
-              {running ? 'Đang chạy…' : `Chạy ${selectedList.length} acc`}
-            </button>
-            {running ? (
-              <button type="button" className="btn btn--danger" onClick={handleStop}>
-                Dừng
-              </button>
-            ) : null}
-          </div>
-        </section>
+              <div className="task-composer__actions">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => void handleRun()}
+                  disabled={running || selectedList.length === 0}
+                >
+                  {running ? 'Đang chạy…' : `Chạy ${selectedList.length} acc`}
+                </button>
+                {running ? (
+                  <button type="button" className="btn btn--danger" onClick={handleStop}>
+                    Dừng
+                  </button>
+                ) : null}
+              </div>
+            </footer>
+          </section>
         </div>
+      </div>
 
-        <section
-          className={`panel tasks-progress-panel${progress.length === 0 ? ' tasks-progress-panel--idle' : ''}${running ? ' tasks-progress-panel--live' : ''}`}
-        >
+      <section
+        className={`panel tasks-progress-panel${progress.length === 0 ? ' tasks-progress-panel--idle' : ''}${running ? ' tasks-progress-panel--live' : ''}`}
+      >
           <div className="tasks-progress-head">
             <div>
               <h2>Tiến trình</h2>
@@ -1427,8 +1403,7 @@ export function TasksPage() {
               Chưa có log — chọn acc ở sidebar và bấm <strong>Chạy</strong>.
             </p>
           )}
-        </section>
-      </div>
+      </section>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-﻿.app-shell {
+.app-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
   min-height: 100vh;
@@ -123,4 +123,27 @@
   overflow-x: auto;
   width: 100%;
   min-width: 0;
+}
+
+@media (min-width: 961px) {
+  .app-shell {
+    display: block;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 20;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .main-wrap {
+    margin-left: 260px;
+    min-height: 100vh;
+    min-width: 0;
+  }
 }

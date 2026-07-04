@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import './SecurityPage.css'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { AccountPickerPanel, type AccountPickerFilterState } from '../components/AccountPickerPanel'
 import { Alert } from '../components/Alert'
 import { PasswordInput } from '../components/PasswordInput'
+import { TaskDelayField } from '../components/TaskDelayField'
 import { useSessionAccounts } from '../hooks/useSessionAccounts'
+import { resolveBulkDelayMs, validateBulkDelay, waitBulkDelay } from '../utils/bulkDelay'
 import type { PrivacyRuleType } from '../types/api'
 
 const PRIVACY_OPTIONS: {
@@ -34,6 +36,45 @@ const PRIVACY_OPTIONS: {
   },
 ]
 
+function Security2faIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 2.5l7.5 3.75V11c0 4.65-3.2 8.85-7.5 9.5C7.7 19.85 4.5 15.65 4.5 11V6.25L12 2.5Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.5 11.5l2 2 3.5-4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
+function SecurityPrivacyIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M12 3c4 2.5 7 3 7 3v6c0 5.2-3.2 9.2-7 10-3.8-.8-7-4.8-7-10V6s3-0.5 7-3Z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.5 12.5h5M12 10v5"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
 function PrivacyRuleIcon({ id }: { id: PrivacyRuleType }) {
   if (id === 'all') {
     return (
@@ -61,7 +102,7 @@ function PrivacyRuleIcon({ id }: { id: PrivacyRuleType }) {
   )
 }
 
-type ActionMode = 'single' | 'bulk'
+type SecuritySection = '2fa' | 'privacy'
 
 type BulkRowStatus = 'pending' | 'running' | 'success' | 'error' | 'skipped'
 
@@ -71,13 +112,117 @@ interface BulkActionRow {
   message: string
 }
 
+function bulkStatusLabel(status: BulkRowStatus): string {
+  const map: Record<BulkRowStatus, string> = {
+    pending: 'Chờ',
+    running: 'Đang chạy',
+    success: 'OK',
+    error: 'Lỗi',
+    skipped: 'Bỏ qua',
+  }
+  return map[status]
+}
+
+function bulkProgressStats(rows: BulkActionRow[]) {
+  const finished = rows.filter((row) =>
+    ['success', 'error', 'skipped'].includes(row.status),
+  ).length
+  const total = rows.length
+  const pct = total > 0 ? Math.round((finished / total) * 100) : 0
+  const done = rows.filter((row) => row.status === 'success').length
+  const failed = rows.filter((row) => row.status === 'error').length
+  const skipped = rows.filter((row) => row.status === 'skipped').length
+  return { finished, total, pct, done, failed, skipped }
+}
+
+function SecurityProgressPanel({
+  rows,
+  stats,
+  running,
+  tone,
+  getLabel,
+  emptyHint,
+}: {
+  rows: BulkActionRow[]
+  stats: ReturnType<typeof bulkProgressStats>
+  running: boolean
+  tone: '2fa' | 'privacy'
+  getLabel: (phone: string) => string
+  emptyHint: string
+}) {
+  return (
+    <section
+      className={`panel security-progress-panel security-progress-panel--${tone}${
+        rows.length === 0 ? ' security-progress-panel--idle' : ''
+      }${running ? ' security-progress-panel--live' : ''}`}
+    >
+      <div className="security-progress-head">
+        <div>
+          <h2>Tiến trình</h2>
+          <p className="panel-meta">
+            {rows.length > 0
+              ? `${stats.done} xong · ${stats.failed} lỗi · ${stats.skipped} bỏ qua`
+              : emptyHint}
+          </p>
+        </div>
+        {rows.length > 0 ? (
+          <span className="security-progress-pct">{stats.pct}%</span>
+        ) : null}
+      </div>
+
+      {rows.length > 0 ? (
+        <div className="security-progress-body">
+          <div
+            className="security-progress-bar"
+            role="progressbar"
+            aria-valuenow={stats.pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div className="security-progress-bar-fill" style={{ width: `${stats.pct}%` }} />
+          </div>
+          <div className="table-wrap security-table-wrap">
+            <table className="data-table security-progress-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Phone</th>
+                  <th>Trạng thái</th>
+                  <th>Kết quả</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, index) => (
+                  <tr key={row.phone} className={`security-progress-row--${row.status}`}>
+                    <td>{index + 1}</td>
+                    <td className="mono">{getLabel(row.phone)}</td>
+                    <td>
+                      <span className={`security-progress-pill security-progress-pill--${row.status}`}>
+                        {bulkStatusLabel(row.status)}
+                      </span>
+                    </td>
+                    <td className="security-result-cell">{row.message || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <p className="security-progress-empty">{emptyHint}</p>
+      )}
+    </section>
+  )
+}
+
 export function SecurityPage() {
   const [searchParams] = useSearchParams()
   const accounts = useSessionAccounts()
-  const [phone, setPhone] = useState(() => searchParams.get('phone') ?? '')
-  const [twoFaMode, setTwoFaMode] = useState<ActionMode>('single')
-  const [privacyMode, setPrivacyMode] = useState<ActionMode>('single')
-  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set())
+  const [securitySection, setSecuritySection] = useState<SecuritySection>('2fa')
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(() => {
+    const fromUrl = searchParams.get('phone')
+    return fromUrl ? new Set([fromUrl]) : new Set()
+  })
   const [accountFilterState, setAccountFilterState] = useState<AccountPickerFilterState>({
     filteredCount: 0,
     totalCount: 0,
@@ -87,8 +232,7 @@ export function SecurityPage() {
   const [newPassword, setNewPassword] = useState('')
   const [hint, setHint] = useState('')
   const [ruleType, setRuleType] = useState<PrivacyRuleType>('all')
-  const [loading2fa, setLoading2fa] = useState(false)
-  const [loadingPrivacy, setLoadingPrivacy] = useState(false)
+
   const [error2fa, setError2fa] = useState('')
   const [success2fa, setSuccess2fa] = useState('')
   const [errorPrivacy, setErrorPrivacy] = useState('')
@@ -97,29 +241,41 @@ export function SecurityPage() {
   const [bulk2faRunning, setBulk2faRunning] = useState(false)
   const [bulkPrivacyRows, setBulkPrivacyRows] = useState<BulkActionRow[]>([])
   const [bulkPrivacyRunning, setBulkPrivacyRunning] = useState(false)
+  const [delaySeconds, setDelaySeconds] = useState(5)
+  const [delayMinSeconds, setDelayMinSeconds] = useState(3)
+  const [delayMaxSeconds, setDelayMaxSeconds] = useState(8)
+  const [useRandomDelay, setUseRandomDelay] = useState(false)
   const bulk2faAbortRef = useRef(false)
   const bulkPrivacyAbortRef = useRef(false)
 
-  const hasSession = Boolean(phone)
   const bulkSelectedList = useMemo(() => [...bulkSelected], [bulkSelected])
-  const useBulkSidebar = twoFaMode === 'bulk' || privacyMode === 'bulk'
+  const selectedCount = bulkSelected.size
+  const isMultiAcc = selectedCount > 1
+  const hasSelection = selectedCount > 0
+  const singlePhone = selectedCount === 1 ? bulkSelectedList[0] : ''
   const anyBulkRunning = bulk2faRunning || bulkPrivacyRunning
-  const actionBusy = loading2fa || loadingPrivacy || anyBulkRunning
-
-  const selectedAccountCount = useBulkSidebar ? bulkSelected.size : phone ? 1 : 0
+  const actionBusy = anyBulkRunning
 
   const accountPickerMeta = useMemo(() => {
     const { filteredCount, totalCount, hasFilters } = accountFilterState
-    if (useBulkSidebar) {
-      if (hasFilters) {
-        return `${bulkSelected.size} chọn · ${filteredCount}/${totalCount} hiển thị`
-      }
-      return `${bulkSelected.size} / ${totalCount} đã chọn`
+    if (selectedCount === 1) {
+      return accounts.getPickerLabel(singlePhone)
     }
-    if (phone) return accounts.getPickerLabel(phone)
+    if (selectedCount > 1) {
+      if (hasFilters) {
+        return `${selectedCount} chọn · ${filteredCount}/${totalCount} hiển thị`
+      }
+      return `${selectedCount} / ${totalCount} đã chọn`
+    }
     if (hasFilters) return `${filteredCount}/${totalCount} hiển thị`
-    return 'Chọn một tài khoản'
-  }, [accountFilterState, useBulkSidebar, bulkSelected.size, phone, accounts])
+    return 'Chọn 1 hoặc nhiều tài khoản'
+  }, [accountFilterState, selectedCount, singlePhone, accounts])
+
+  function selectionSummary(): string {
+    if (selectedCount === 0) return 'Chọn acc ở sidebar'
+    if (selectedCount === 1) return accounts.getPickerLabel(singlePhone)
+    return `${selectedCount} acc đã chọn`
+  }
 
   useEffect(() => {
     if (!success2fa) return
@@ -141,42 +297,28 @@ export function SecurityPage() {
     bulkPrivacyAbortRef.current = true
   }
 
-  async function handleUpdate2fa(e: React.FormEvent) {
-    e.preventDefault()
-    if (!phone || !newPassword.trim()) return
-    setLoading2fa(true)
-    setError2fa('')
-    setSuccess2fa('')
-    try {
-      const res = await api.update2fa(
-        phone,
-        newPassword.trim(),
-        currentPassword || undefined,
-        hint || undefined,
-      )
-      if (!res.success || !res.data) {
-        setError2fa(res.error ?? 'Cập nhật 2FA thất bại')
-        return
-      }
-      if (res.data.status === 'error') {
-        setError2fa(res.data.message)
-        return
-      }
-      setSuccess2fa(res.data.message)
-      setCurrentPassword('')
-      setNewPassword('')
-      setHint('')
-    } catch {
-      setError2fa('Không kết nối được API.')
-    } finally {
-      setLoading2fa(false)
-    }
-  }
+  const bulkDelayOptions = useMemo(
+    () => ({
+      useRandomDelay,
+      delaySeconds,
+      delayMinSeconds,
+      delayMaxSeconds,
+    }),
+    [useRandomDelay, delaySeconds, delayMinSeconds, delayMaxSeconds],
+  )
 
   async function handleBulkUpdate2fa(e: React.FormEvent) {
     e.preventDefault()
     const phones = bulkSelectedList
     if (phones.length === 0 || !newPassword.trim()) return
+
+    if (phones.length > 1) {
+      const delayError = validateBulkDelay(bulkDelayOptions)
+      if (delayError) {
+        setError2fa(delayError)
+        return
+      }
+    }
 
     setBulk2faRunning(true)
     setError2fa('')
@@ -244,6 +386,10 @@ export function SecurityPage() {
           ),
         )
       }
+
+      if (i < phones.length - 1 && !bulk2faAbortRef.current) {
+        await waitBulkDelay(resolveBulkDelayMs(bulkDelayOptions))
+      }
     }
 
     if (bulk2faAbortRef.current) {
@@ -260,34 +406,18 @@ export function SecurityPage() {
     setBulk2faRunning(false)
   }
 
-  async function handleUpdatePrivacy(e: React.FormEvent) {
-    e.preventDefault()
-    if (!phone) return
-    setLoadingPrivacy(true)
-    setErrorPrivacy('')
-    setSuccessPrivacy('')
-    try {
-      const res = await api.updatePrivacy(phone, ruleType)
-      if (!res.success || !res.data) {
-        setErrorPrivacy(res.error ?? 'Cập nhật privacy thất bại')
-        return
-      }
-      if (res.data.status === 'error') {
-        setErrorPrivacy(res.data.message)
-        return
-      }
-      setSuccessPrivacy(res.data.message)
-    } catch {
-      setErrorPrivacy('Không kết nối được API.')
-    } finally {
-      setLoadingPrivacy(false)
-    }
-  }
-
   async function handleBulkUpdatePrivacy(e: React.FormEvent) {
     e.preventDefault()
     const phones = bulkSelectedList
     if (phones.length === 0) return
+
+    if (phones.length > 1) {
+      const delayError = validateBulkDelay(bulkDelayOptions)
+      if (delayError) {
+        setErrorPrivacy(delayError)
+        return
+      }
+    }
 
     setBulkPrivacyRunning(true)
     setErrorPrivacy('')
@@ -350,6 +480,10 @@ export function SecurityPage() {
           ),
         )
       }
+
+      if (i < phones.length - 1 && !bulkPrivacyAbortRef.current) {
+        await waitBulkDelay(resolveBulkDelayMs(bulkDelayOptions))
+      }
     }
 
     if (bulkPrivacyAbortRef.current) {
@@ -366,54 +500,42 @@ export function SecurityPage() {
     setBulkPrivacyRunning(false)
   }
 
-  function bulkProgress(rows: BulkActionRow[]) {
-    const finished = rows.filter((row) =>
-      ['success', 'error', 'skipped'].includes(row.status),
-    ).length
-    const total = rows.length
-    const pct = total > 0 ? Math.round((finished / total) * 100) : 0
-    return { finished, total, pct }
-  }
+  const bulk2faProgress = bulkProgressStats(bulk2faRows)
+  const bulkPrivacyProgress = bulkProgressStats(bulkPrivacyRows)
 
-  const bulk2faProgress = bulkProgress(bulk2faRows)
-  const bulkPrivacyProgress = bulkProgress(bulkPrivacyRows)
+  const activeBulkRows = securitySection === '2fa' ? bulk2faRows : bulkPrivacyRows
+  const activeBulkProgress =
+    securitySection === '2fa' ? bulk2faProgress : bulkPrivacyProgress
+  const activeBulkRunning = securitySection === '2fa' ? bulk2faRunning : bulkPrivacyRunning
+
+  const delaySummary = useRandomDelay
+    ? `${delayMinSeconds}–${delayMaxSeconds}s`
+    : `${delaySeconds}s`
+
+  const progressEmptyHint =
+    securitySection === '2fa'
+      ? 'Chọn acc, nhập mật khẩu mới và bấm Cập nhật để xem log từng tài khoản'
+      : 'Chọn acc, chọn quy tắc và bấm Cập nhật để xem log từng tài khoản'
 
   return (
-    <div className="page page--security page--security-active">
-      <header className="page-header security-page-header">
-        <div>
-          <span className="security-page-kicker">Account</span>
-          <h1>Bảo mật</h1>
-          <p className="page-desc">
-            2FA & Privacy group — một hoặc nhiều acc. Session trong{' '}
-            <Link to="/sessions">Sessions</Link>.
-          </p>
-        </div>
-        <div className="security-header-actions">
-          <Link to="/sessions" className="btn btn--ghost btn--sm">
-            Sessions
-          </Link>
-        </div>
-      </header>
-
+    <div className="page page--security">
       <div className="security-workspace">
+        <div className="security-workspace-top">
         <AccountPickerPanel
           className="security-session-panel"
-          title={useBulkSidebar ? 'Chọn acc' : 'Tài khoản'}
+          title="Tài khoản"
           meta={accountPickerMeta}
-          badgeCount={selectedAccountCount}
+          badgeCount={selectedCount}
           sessions={accounts.sessions}
           loading={accounts.loading}
           getMeta={accounts.getMeta}
-          selectionMode={useBulkSidebar ? 'multiple' : 'single'}
-          selectedPhone={phone}
-          onSelectedPhoneChange={setPhone}
+          selectionMode="multiple"
           selectedPhones={bulkSelected}
           onSelectedPhonesChange={setBulkSelected}
           disabled={anyBulkRunning}
           busy={anyBulkRunning}
-          footerSelectedSuffix={useBulkSidebar ? 'acc đã chọn' : 'acc đang dùng'}
-          showSelectionToolbar={useBulkSidebar}
+          footerSelectedSuffix="acc đã chọn"
+          showSelectionToolbar
           onFiltersChange={setAccountFilterState}
           panelFoot={
             <>
@@ -423,299 +545,219 @@ export function SecurityPage() {
         />
 
         <div className="security-main">
-          <section className="panel security-actions-panel">
-          <div className="security-block security-block--2fa">
-            <div className="security-card-head security-card-head--split security-card-head--2fa">
-              <div className="security-card-head-main">
-                <h2>Đổi / bật 2FA</h2>
-                <p className="panel-meta">Mật khẩu xác thực hai lớp trên Telegram</p>
-              </div>
-              <div className="security-card-head-aside">
-                <div className="security-2fa-mode" role="tablist" aria-label="Chế độ 2FA">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={twoFaMode === 'single'}
-                    className={`security-2fa-mode-btn${twoFaMode === 'single' ? ' security-2fa-mode-btn--active' : ''}`}
-                    onClick={() => setTwoFaMode('single')}
-                    disabled={actionBusy}
-                  >
-                    Một acc
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={twoFaMode === 'bulk'}
-                    className={`security-2fa-mode-btn${twoFaMode === 'bulk' ? ' security-2fa-mode-btn--active' : ''}`}
-                    onClick={() => setTwoFaMode('bulk')}
-                    disabled={actionBusy}
-                  >
-                    Nhiều acc
-                    {bulkSelected.size > 0 ? (
-                      <span className="security-2fa-mode-count">{bulkSelected.size}</span>
-                    ) : null}
-                  </button>
-                </div>
-                <span className="security-card-badge">2FA</span>
-              </div>
+          <section
+            className={`panel security-composer security-composer--${securitySection}`}
+          >
+            <div className="security-section-tabs" role="tablist" aria-label="Loại thao tác">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={securitySection === '2fa'}
+                className={`security-section-tab security-section-tab--2fa${
+                  securitySection === '2fa' ? ' security-section-tab--active' : ''
+                }`}
+                disabled={actionBusy}
+                onClick={() => setSecuritySection('2fa')}
+              >
+                <Security2faIcon />
+                <span>2FA</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={securitySection === 'privacy'}
+                className={`security-section-tab security-section-tab--privacy${
+                  securitySection === 'privacy' ? ' security-section-tab--active' : ''
+                }`}
+                disabled={actionBusy}
+                onClick={() => setSecuritySection('privacy')}
+              >
+                <SecurityPrivacyIcon />
+                <span>Privacy</span>
+              </button>
             </div>
 
-            <div className="security-card-body">
-              <div className="security-card-scroll security-card-scroll--2fa">
-                <Alert type="error" message={error2fa} />
-                <Alert type="success" message={success2fa} />
+          {securitySection === '2fa' ? (
+          <div className="security-pane security-pane--2fa">
+            <header className="security-pane__hero">
+              <div className="security-pane__hero-icon security-pane__hero-icon--2fa">
+                <Security2faIcon />
+              </div>
+              <div className="security-pane__hero-text">
+                <h2>Đổi / bật 2FA</h2>
+                <p className="muted">Mật khẩu xác thực hai lớp trên Telegram</p>
+              </div>
+              <span
+                className={`security-pane__chip security-pane__chip--2fa${
+                  hasSelection ? '' : ' security-pane__chip--empty'
+                }`}
+              >
+                {hasSelection ? `${selectedCount} acc` : 'Chưa chọn'}
+              </span>
+            </header>
 
-                <div className="security-action-context security-action-context--2fa">
-                  <span className="security-action-context-label">
-                    {twoFaMode === 'single' ? 'Áp dụng cho' : 'Bulk'}
-                  </span>
-                  <span className="security-action-context-value">
-                    {twoFaMode === 'single'
-                      ? hasSession
-                        ? accounts.getPickerLabel(phone)
-                        : 'Chọn acc ở sidebar'
-                      : bulkSelected.size > 0
-                        ? `${bulkSelected.size} acc đã chọn`
-                        : 'Chọn nhiều acc ở sidebar'}
-                  </span>
+            <div className="security-pane__body">
+              <Alert type="error" message={error2fa} />
+              <Alert type="success" message={success2fa} />
+
+              <section className="security-pane__section">
+                <div className="security-target-card security-target-card--2fa">
+                  <span className="security-target-card__label">Áp dụng cho</span>
+                  <span className="security-target-card__value">{selectionSummary()}</span>
                 </div>
+              </section>
 
+              <section className="security-pane__section security-pane__section--fields">
+                <h3 className="security-pane__section-title">Mật khẩu</h3>
                 <form
                   id="security-2fa-form"
                   className="security-form security-form--2fa"
-                  onSubmit={(e) =>
-                    void (twoFaMode === 'single' ? handleUpdate2fa(e) : handleBulkUpdate2fa(e))
-                  }
+                  onSubmit={(e) => void handleBulkUpdate2fa(e)}
                 >
-                  <PasswordInput
-                    label="Mật khẩu 2FA hiện tại"
-                    value={currentPassword}
-                    onChange={setCurrentPassword}
-                    placeholder="Bỏ trống nếu chưa bật 2FA"
-                    autoComplete="current-password"
-                    disabled={
-                      actionBusy || (twoFaMode === 'single' ? !hasSession : bulkSelected.size === 0)
-                    }
-                  />
-                  <PasswordInput
-                    label="Mật khẩu 2FA mới"
-                    value={newPassword}
-                    onChange={setNewPassword}
-                    placeholder="Mật khẩu mới (dùng chung cho bulk)"
-                    required
-                    autoComplete="new-password"
-                    disabled={
-                      actionBusy || (twoFaMode === 'single' ? !hasSession : bulkSelected.size === 0)
-                    }
-                  />
-                  <label className="field security-hint-field">
-                    <span>Gợi ý (tuỳ chọn)</span>
-                    <input
-                      type="text"
-                      value={hint}
-                      onChange={(e) => setHint(e.target.value)}
-                      placeholder="Gợi ý khi quên mật khẩu"
-                      disabled={
-                        actionBusy || (twoFaMode === 'single' ? !hasSession : bulkSelected.size === 0)
-                      }
+                  <div className="security-field-stack">
+                    <PasswordInput
+                      label="Mật khẩu hiện tại"
+                      value={currentPassword}
+                      onChange={setCurrentPassword}
+                      placeholder="Bỏ trống nếu chưa bật"
+                      autoComplete="current-password"
+                      disabled={actionBusy || !hasSelection}
                     />
-                  </label>
+                    <PasswordInput
+                      label="Mật khẩu mới"
+                      value={newPassword}
+                      onChange={setNewPassword}
+                      placeholder={isMultiAcc ? 'Dùng chung cho tất cả acc' : 'Nhập mật khẩu mới'}
+                      required
+                      autoComplete="new-password"
+                      disabled={actionBusy || !hasSelection}
+                    />
+                    <label className="field security-hint-field">
+                      <span>Gợi ý khi quên (tuỳ chọn)</span>
+                      <input
+                        type="text"
+                        value={hint}
+                        onChange={(e) => setHint(e.target.value)}
+                        placeholder="Ví dụ: tên thú cưng, ngày sinh…"
+                        disabled={actionBusy || !hasSelection}
+                      />
+                    </label>
+                  </div>
                 </form>
+              </section>
 
-                <aside className="security-2fa-guide security-2fa-guide--row" aria-label="Hướng dẫn 2FA">
-                  <p className="security-guide-kicker">Hướng dẫn</p>
-                  <ol className="security-guide-steps security-guide-steps--row">
-                    <li>
-                      <span className="security-guide-step-num">1</span>
-                      <span className="security-guide-step-text">
-                        {twoFaMode === 'single'
-                          ? 'Chọn acc ở sidebar'
-                          : 'Chọn nhiều acc ở sidebar'}
-                      </span>
-                    </li>
-                    <li>
-                      <span className="security-guide-step-num">2</span>
-                      <span className="security-guide-step-text">
-                        Nhập mật khẩu mới
-                        {twoFaMode === 'bulk' ? ' (chung)' : ''} — bỏ trống mật khẩu cũ nếu chưa bật
-                      </span>
-                    </li>
-                    <li>
-                      <span className="security-guide-step-num">3</span>
-                      <span className="security-guide-step-text">
-                        {twoFaMode === 'bulk'
-                          ? 'Cập nhật — chạy lần lượt từng acc'
-                          : 'Cập nhật — áp dụng ngay trên Telegram'}
-                      </span>
-                    </li>
-                  </ol>
-                </aside>
-
-              {twoFaMode === 'bulk' && bulk2faRows.length > 0 ? (
-                <div className="security-bulk-progress security-bulk-progress--2fa">
-                  <div className="security-bulk-progress-head">
-                    <span>Tiến trình</span>
-                    <span className="security-bulk-progress-pct">{bulk2faProgress.pct}%</span>
-                  </div>
-                  <div className="security-bulk-progress-bar">
-                    <span
-                      className="security-bulk-progress-fill"
-                      style={{ width: `${bulk2faProgress.pct}%` }}
-                    />
-                  </div>
-                  <div className="table-wrap">
-                    <table className="data-table security-bulk-progress-table">
-                      <thead>
-                        <tr>
-                          <th>Acc</th>
-                          <th>Trạng thái</th>
-                          <th>Thông báo</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {bulk2faRows.map((row) => (
-                          <tr
-                            key={row.phone}
-                            className={`security-bulk-progress-row security-bulk-progress-row--${row.status}`}
-                          >
-                            <td>
-                              <span className="phone">{row.phone}</span>
-                            </td>
-                            <td>
-                              <span className={`security-bulk-status security-bulk-status--${row.status}`}>
-                                {row.status === 'pending'
-                                  ? 'Chờ'
-                                  : row.status === 'running'
-                                    ? 'Đang chạy'
-                                    : row.status === 'success'
-                                      ? 'OK'
-                                      : row.status === 'skipped'
-                                        ? 'Bỏ qua'
-                                        : 'Lỗi'}
-                              </span>
-                            </td>
-                            <td>
-                              <span className="security-bulk-message muted">{row.message || '—'}</span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : null}
-              </div>
-
-              <div className="security-card-foot">
-                <div className="security-form-actions">
-                  {twoFaMode === 'bulk' && bulk2faRunning ? (
-                    <button
-                      type="button"
-                      className="btn btn--danger"
-                      onClick={stopBulk2fa}
-                    >
-                      Dừng
-                    </button>
-                  ) : null}
-                  <button
-                    type="submit"
-                    form="security-2fa-form"
-                    className="btn btn--primary security-submit-btn"
-                    disabled={
-                      loading2fa ||
-                      bulk2faRunning ||
-                      !newPassword.trim() ||
-                      (twoFaMode === 'single' ? !hasSession : bulkSelected.size === 0)
-                    }
-                  >
-                    {bulk2faRunning
-                      ? `Đang chạy ${bulk2faProgress.finished}/${bulkSelected.size}…`
-                      : loading2fa
-                        ? 'Đang cập nhật…'
-                        : twoFaMode === 'single'
-                          ? 'Cập nhật 2FA'
-                          : `Cập nhật ${bulkSelected.size} acc`}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="security-blocks-divider" role="presentation" />
-
-          <div className="security-block security-block--privacy">
-            <div className="security-card-head security-card-head--split security-card-head--privacy">
-              <div className="security-card-head-main">
-                <h2>Privacy — mời group</h2>
-                <p className="panel-meta">
-                  {privacyMode === 'bulk'
-                    ? `${bulkSelected.size} acc · cùng quy tắc mời`
-                    : hasSession
-                      ? 'Ai được mời bạn vào nhóm'
-                      : 'Chọn acc ở sidebar'}
+              {isMultiAcc ? (
+                <section className="security-pane__section security-pane__section--delay">
+                  <TaskDelayField
+                    useRandomDelay={useRandomDelay}
+                    onUseRandomDelayChange={setUseRandomDelay}
+                    delaySeconds={delaySeconds}
+                    onDelaySecondsChange={setDelaySeconds}
+                    delayMinSeconds={delayMinSeconds}
+                    onDelayMinSecondsChange={setDelayMinSeconds}
+                    delayMaxSeconds={delayMaxSeconds}
+                    onDelayMaxSecondsChange={setDelayMaxSeconds}
+                    disabled={actionBusy}
+                  />
+                </section>
+              ) : (
+                <p className="security-callout security-callout--2fa">
+                  Bỏ trống mật khẩu cũ nếu acc chưa bật 2FA.
                 </p>
-              </div>
-              <div className="security-card-head-aside">
-                <div className="security-privacy-mode" role="tablist" aria-label="Chế độ Privacy">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={privacyMode === 'single'}
-                    className={`security-privacy-mode-btn${privacyMode === 'single' ? ' security-privacy-mode-btn--active' : ''}`}
-                    onClick={() => setPrivacyMode('single')}
-                    disabled={actionBusy}
-                  >
-                    Một acc
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={privacyMode === 'bulk'}
-                    className={`security-privacy-mode-btn${privacyMode === 'bulk' ? ' security-privacy-mode-btn--active' : ''}`}
-                    onClick={() => setPrivacyMode('bulk')}
-                    disabled={actionBusy}
-                  >
-                    Nhiều acc
-                    {bulkSelected.size > 0 ? (
-                      <span className="security-privacy-mode-count">{bulkSelected.size}</span>
-                    ) : null}
-                  </button>
-                </div>
-                <span className="security-card-badge security-card-badge--privacy">
-                  Privacy
+              )}
+            </div>
+
+            <footer className="security-pane__foot security-pane__foot--2fa">
+              <div className="security-pane__foot-summary">
+                <span className="security-pane__foot-title">
+                  {isMultiAcc
+                    ? `${selectedCount} acc · delay ${delaySummary}`
+                    : selectionSummary()}
+                </span>
+                <span className="security-pane__foot-meta muted">
+                  {bulk2faRunning
+                    ? `Đang chạy ${bulk2faProgress.finished}/${bulk2faProgress.total}`
+                    : hasSelection
+                      ? 'Cuộn xuống xem tiến trình'
+                      : 'Chọn acc ở sidebar'}
                 </span>
               </div>
-            </div>
+              {bulk2faRows.length > 0 ? (
+                <div
+                  className="security-pane__ring security-pane__ring--2fa"
+                  style={{ '--ring-pct': bulk2faProgress.pct } as CSSProperties}
+                  aria-hidden
+                >
+                  <span>{bulk2faProgress.pct}%</span>
+                </div>
+              ) : null}
+              <div className="security-pane__foot-actions">
+                {bulk2faRunning ? (
+                  <button type="button" className="btn btn--danger" onClick={stopBulk2fa}>
+                    Dừng
+                  </button>
+                ) : null}
+                <button
+                  type="submit"
+                  form="security-2fa-form"
+                  className="btn security-pane__submit security-pane__submit--2fa"
+                  disabled={bulk2faRunning || !newPassword.trim() || !hasSelection}
+                >
+                  {bulk2faRunning
+                    ? `Đang chạy ${bulk2faProgress.finished}/${selectedCount}…`
+                    : isMultiAcc
+                      ? `Cập nhật ${selectedCount} acc`
+                      : 'Cập nhật 2FA'}
+                </button>
+              </div>
+            </footer>
+          </div>
+          ) : (
+          <div className="security-pane security-pane--privacy">
+            <header className="security-pane__hero">
+              <div className="security-pane__hero-icon security-pane__hero-icon--privacy">
+                <SecurityPrivacyIcon />
+              </div>
+              <div className="security-pane__hero-text">
+                <h2>Mời vào group</h2>
+                <p className="muted">
+                  {isMultiAcc
+                    ? `${selectedCount} acc · cùng quy tắc`
+                    : 'Ai được phép mời bạn tham gia nhóm'}
+                </p>
+              </div>
+              <span
+                className={`security-pane__chip security-pane__chip--privacy${
+                  hasSelection ? '' : ' security-pane__chip--empty'
+                }`}
+              >
+                {hasSelection ? `${selectedCount} acc` : 'Chưa chọn'}
+              </span>
+            </header>
 
-            <div className="security-card-body">
-              <div className="security-card-scroll privacy-card-scroll">
-                <Alert type="error" message={errorPrivacy} />
-                <Alert type="success" message={successPrivacy} />
+            <div className="security-pane__body">
+              <Alert type="error" message={errorPrivacy} />
+              <Alert type="success" message={successPrivacy} />
 
-                <div className="security-action-context security-action-context--privacy">
-                  <span className="security-action-context-label">
-                    {privacyMode === 'single' ? 'Áp dụng cho' : 'Bulk'}
-                  </span>
-                  <span className="security-action-context-value">
-                    {privacyMode === 'single'
-                      ? hasSession
-                        ? accounts.getPickerLabel(phone)
-                        : 'Chọn acc ở sidebar'
-                      : bulkSelected.size > 0
-                        ? `${bulkSelected.size} acc · cùng quy tắc`
-                        : 'Chọn nhiều acc ở sidebar'}
+              <section className="security-pane__section">
+                <div className="security-target-card security-target-card--privacy">
+                  <span className="security-target-card__label">Áp dụng cho</span>
+                  <span className="security-target-card__value">
+                    {selectedCount > 1
+                      ? `${selectedCount} acc · cùng quy tắc`
+                      : selectionSummary()}
                   </span>
                 </div>
+              </section>
 
+              <section className="security-pane__section security-pane__section--rules">
+                <h3 className="security-pane__section-title">Quy tắc mời group</h3>
                 <form
                   id="security-privacy-form"
                   className="privacy-form"
-                  onSubmit={(e) =>
-                    void (privacyMode === 'single' ? handleUpdatePrivacy(e) : handleBulkUpdatePrivacy(e))
-                  }
+                  onSubmit={(e) => void handleBulkUpdatePrivacy(e)}
                 >
-                  <p className="security-control-label security-privacy-pick-label">Quy tắc mời group</p>
-                  <div className="privacy-rule-grid" role="radiogroup" aria-label="Quy tắc mời group">
+                  <div className="privacy-rule-list" role="radiogroup" aria-label="Quy tắc mời group">
                     {PRIVACY_OPTIONS.map((option) => {
                       const active = ruleType === option.id
                       return (
@@ -724,117 +766,107 @@ export function SecurityPage() {
                           type="button"
                           role="radio"
                           aria-checked={active}
-                          className={`privacy-rule-card${active ? ' privacy-rule-card--active' : ''}`}
+                          className={`privacy-rule-option${active ? ' privacy-rule-option--active' : ''}`}
                           onClick={() => setRuleType(option.id)}
-                          disabled={
-                            actionBusy ||
-                            (privacyMode === 'single' ? !hasSession : bulkSelected.size === 0)
-                          }
+                          disabled={actionBusy || !hasSelection}
                         >
-                          <span className="privacy-rule-card-icon" aria-hidden>
+                          <span className="privacy-rule-option__icon" aria-hidden>
                             <PrivacyRuleIcon id={option.id} />
                           </span>
-                          <span className="privacy-rule-card-text">
-                            <span className="privacy-rule-card-label">{option.label}</span>
-                            <span className="privacy-rule-card-desc muted">{option.desc}</span>
+                          <span className="privacy-rule-option__content">
+                            <span className="privacy-rule-option__label">{option.label}</span>
+                            <span className="privacy-rule-option__desc muted">{option.desc}</span>
                           </span>
+                          <span
+                            className={`privacy-rule-option__check${active ? ' privacy-rule-option__check--on' : ''}`}
+                            aria-hidden
+                          />
                         </button>
                       )
                     })}
                   </div>
                 </form>
+                <p className="security-callout security-callout--privacy">
+                  {PRIVACY_OPTIONS.find((o) => o.id === ruleType)?.hint}
+                </p>
+              </section>
 
-                {privacyMode === 'bulk' && bulkPrivacyRows.length > 0 ? (
-                  <div className="security-bulk-progress security-bulk-progress--privacy">
-                    <div className="security-bulk-progress-head">
-                      <span>Tiến trình</span>
-                      <span className="security-bulk-progress-pct">{bulkPrivacyProgress.pct}%</span>
-                    </div>
-                    <div className="security-bulk-progress-bar">
-                      <span
-                        className="security-bulk-progress-fill"
-                        style={{ width: `${bulkPrivacyProgress.pct}%` }}
-                      />
-                    </div>
-                    <div className="table-wrap">
-                      <table className="data-table security-bulk-progress-table">
-                        <thead>
-                          <tr>
-                            <th>Acc</th>
-                            <th>Trạng thái</th>
-                            <th>Thông báo</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {bulkPrivacyRows.map((row) => (
-                            <tr
-                              key={row.phone}
-                              className={`security-bulk-progress-row security-bulk-progress-row--${row.status}`}
-                            >
-                              <td>
-                                <span className="phone">{row.phone}</span>
-                              </td>
-                              <td>
-                                <span className={`security-bulk-status security-bulk-status--${row.status}`}>
-                                  {row.status === 'pending'
-                                    ? 'Chờ'
-                                    : row.status === 'running'
-                                      ? 'Đang chạy'
-                                      : row.status === 'success'
-                                        ? 'OK'
-                                        : row.status === 'skipped'
-                                          ? 'Bỏ qua'
-                                          : 'Lỗi'}
-                                </span>
-                              </td>
-                              <td>
-                                <span className="security-bulk-message muted">{row.message || '—'}</span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="security-card-foot">
-                <div className="security-form-actions">
-                  {privacyMode === 'bulk' && bulkPrivacyRunning ? (
-                    <button
-                      type="button"
-                      className="btn btn--danger"
-                      onClick={stopBulkPrivacy}
-                    >
-                      Dừng
-                    </button>
-                  ) : null}
-                  <button
-                    type="submit"
-                    form="security-privacy-form"
-                    className="btn btn--primary security-submit-btn"
-                    disabled={
-                      loadingPrivacy ||
-                      bulkPrivacyRunning ||
-                      (privacyMode === 'single' ? !hasSession : bulkSelected.size === 0)
-                    }
-                  >
-                    {bulkPrivacyRunning
-                      ? `Đang chạy ${bulkPrivacyProgress.finished}/${bulkSelected.size}…`
-                      : loadingPrivacy
-                        ? 'Đang cập nhật…'
-                        : privacyMode === 'single'
-                          ? 'Cập nhật Privacy'
-                          : `Cập nhật ${bulkSelected.size} acc`}
-                  </button>
-                </div>
-              </div>
+              {isMultiAcc ? (
+                <section className="security-pane__section security-pane__section--delay">
+                  <TaskDelayField
+                    useRandomDelay={useRandomDelay}
+                    onUseRandomDelayChange={setUseRandomDelay}
+                    delaySeconds={delaySeconds}
+                    onDelaySecondsChange={setDelaySeconds}
+                    delayMinSeconds={delayMinSeconds}
+                    onDelayMinSecondsChange={setDelayMinSeconds}
+                    delayMaxSeconds={delayMaxSeconds}
+                    onDelayMaxSecondsChange={setDelayMaxSeconds}
+                    disabled={actionBusy}
+                  />
+                </section>
+              ) : null}
             </div>
+
+            <footer className="security-pane__foot security-pane__foot--privacy">
+              <div className="security-pane__foot-summary">
+                <span className="security-pane__foot-title">
+                  {isMultiAcc
+                    ? `${selectedCount} acc · ${PRIVACY_OPTIONS.find((o) => o.id === ruleType)?.label}`
+                    : selectionSummary()}
+                </span>
+                <span className="security-pane__foot-meta muted">
+                  {bulkPrivacyRunning
+                    ? `Đang chạy ${bulkPrivacyProgress.finished}/${bulkPrivacyProgress.total}${isMultiAcc ? ` · ${delaySummary}` : ''}`
+                    : hasSelection
+                      ? 'Cuộn xuống xem tiến trình'
+                      : PRIVACY_OPTIONS.find((o) => o.id === ruleType)?.label ?? 'Chọn quy tắc'}
+                </span>
+              </div>
+              {bulkPrivacyRows.length > 0 ? (
+                <div
+                  className="security-pane__ring security-pane__ring--privacy"
+                  style={{ '--ring-pct': bulkPrivacyProgress.pct } as CSSProperties}
+                  aria-hidden
+                >
+                  <span>{bulkPrivacyProgress.pct}%</span>
+                </div>
+              ) : null}
+              <div className="security-pane__foot-actions">
+                {bulkPrivacyRunning ? (
+                  <button type="button" className="btn btn--danger" onClick={stopBulkPrivacy}>
+                    Dừng
+                  </button>
+                ) : null}
+                <button
+                  type="submit"
+                  form="security-privacy-form"
+                  className="btn security-pane__submit security-pane__submit--privacy"
+                  disabled={bulkPrivacyRunning || !hasSelection}
+                >
+                  {bulkPrivacyRunning
+                    ? `Đang chạy ${bulkPrivacyProgress.finished}/${selectedCount}…`
+                    : isMultiAcc
+                      ? `Cập nhật ${selectedCount} acc`
+                      : 'Cập nhật Privacy'}
+                </button>
+              </div>
+            </footer>
           </div>
+          )}
           </section>
         </div>
+        </div>
       </div>
+
+      <SecurityProgressPanel
+        rows={activeBulkRows}
+        stats={activeBulkProgress}
+        running={activeBulkRunning}
+        tone={securitySection}
+        getLabel={accounts.getPickerLabel}
+        emptyHint={progressEmptyHint}
+      />
     </div>
   )
 }
