@@ -1,7 +1,6 @@
-import asyncio
 import json
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket
 from fastapi.responses import Response, StreamingResponse
 
 from ..schemas.common import ApiEnvelope
@@ -12,6 +11,7 @@ from ..schemas.dialogs import (
     MarkDialogReadData,
     MarkDialogReadRequest,
 )
+from ..services.realtime import iter_dialog_message_poll, message_ws_manager
 from ..services.telegram.dialogs import telegram_dialog_service
 from ..utils.responses import success_response
 
@@ -73,6 +73,11 @@ async def search_dialog_messages(
     return success_response(data.model_dump())
 
 
+def _sse_event(event_name: str, payload: dict | None = None) -> str:
+    data = json.dumps(payload or {}, ensure_ascii=False)
+    return f"event: {event_name}\ndata: {data}\n\n"
+
+
 @router.get("/{phone}/messages/stream")
 async def stream_dialog_messages(
     request: Request,
@@ -81,40 +86,28 @@ async def stream_dialog_messages(
     min_id: int = Query(..., ge=1, description="Lay tin co id lon hon min_id"),
 ) -> StreamingResponse:
     async def event_stream():
-        cursor = min_id
-        idle_ticks = 0
-        while True:
-            if await request.is_disconnected():
-                break
-
-            result = await telegram_dialog_service.get_new_messages(
-                phone,
-                peer_id,
-                cursor,
-                50,
-            )
-            if result.get("status") == "success":
-                messages = result.get("messages") or []
-                if messages:
-                    cursor = max(int(cursor), max(int(item["id"]) for item in messages))
-                    latest = messages[-1]
-                    preview = telegram_dialog_service._dialog_preview_from_row(latest)
-                    preview["peer_id"] = str(peer_id)
-                    payload = {
-                        "messages": messages,
-                        "dialog_preview": preview,
-                    }
-                    yield f"event: messages\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
-                    idle_ticks = 0
-                else:
-                    idle_ticks += 1
-            else:
-                idle_ticks += 1
-
-            if idle_ticks > 0 and idle_ticks % 15 == 0:
-                yield "event: heartbeat\ndata: {}\n\n"
-
-            await asyncio.sleep(2)
+        async for payload in iter_dialog_message_poll(
+            phone,
+            peer_id,
+            min_id,
+            is_cancelled=request.is_disconnected,
+        ):
+            event_type = payload.get("type")
+            if event_type == "messages":
+                yield _sse_event(
+                    "messages",
+                    {
+                        "messages": payload.get("messages") or [],
+                        "dialog_preview": payload.get("dialog_preview"),
+                    },
+                )
+            elif event_type == "heartbeat":
+                yield _sse_event("heartbeat")
+            elif event_type == "error":
+                yield _sse_event(
+                    "error",
+                    {"message": payload.get("message", "Khong lay duoc tin moi")},
+                )
 
     return StreamingResponse(
         event_stream(),
@@ -124,6 +117,27 @@ async def stream_dialog_messages(
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
+    )
+
+
+@router.websocket("/{phone}/messages/ws")
+async def ws_dialog_messages(
+    websocket: WebSocket,
+    phone: str,
+    peer_id: str = Query(..., description="Dialog id hoac username"),
+    min_id: int = Query(..., ge=1, description="Lay tin co id lon hon min_id"),
+    last_seen_id: int = Query(
+        default=0,
+        ge=0,
+        description="ID tin cuoi client da co (uu tien khi reconnect)",
+    ),
+) -> None:
+    await message_ws_manager.handle_connection(
+        websocket,
+        phone,
+        peer_id,
+        min_id,
+        last_seen_id=last_seen_id,
     )
 
 

@@ -116,6 +116,37 @@ export function mergeNewMessages(
   return [...prev, ...uniqueNew].sort((a, b) => a.id - b.id)
 }
 
+export function applyEditedMessage(
+  prev: DialogMessageItem[],
+  edited: DialogMessageItem,
+): DialogMessageItem[] {
+  const index = prev.findIndex((msg) => msg.id === edited.id)
+  if (index < 0) return prev
+  const next = [...prev]
+  next[index] = { ...next[index], ...edited }
+  return next
+}
+
+export function applyDeletedMessage(
+  prev: DialogMessageItem[],
+  messageId: number,
+): DialogMessageItem[] {
+  if (!messageId) return prev
+  return prev.filter((msg) => msg.id !== messageId)
+}
+
+export function applyMessageReactions(
+  prev: DialogMessageItem[],
+  messageId: number,
+  reactions: DialogMessageItem['reactions'],
+): DialogMessageItem[] {
+  const index = prev.findIndex((msg) => msg.id === messageId)
+  if (index < 0) return prev
+  const next = [...prev]
+  next[index] = { ...next[index], reactions: [...reactions] }
+  return next
+}
+
 export type ReplyQuotePreview = {
   id: number
   text: string

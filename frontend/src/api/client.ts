@@ -367,6 +367,22 @@ export const api = {
     return `/api/dialogs/${encodeURIComponent(phone)}/messages/stream?${params}`
   },
 
+  dialogMessageWsUrl(
+    phone: string,
+    peerId: string,
+    minId: number,
+    lastSeenId = 0,
+  ) {
+    const params = new URLSearchParams({
+      peer_id: peerId,
+      min_id: String(minId),
+    })
+    if (lastSeenId > 0) {
+      params.set('last_seen_id', String(lastSeenId))
+    }
+    return `/api/dialogs/${encodeURIComponent(phone)}/messages/ws?${params}`
+  },
+
   sendMessage(phone: string, peerId: string, text: string) {
     return request<SendMessageData>('/messages/send', {
       method: 'POST',

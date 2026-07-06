@@ -18,7 +18,7 @@ export function pageLabel(path: string | null): string {
 }
 
 export interface ApiMapItem {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'WS'
   path: string
   page: string | null
 }
@@ -83,6 +83,7 @@ export const apiMap: ApiMapGroup[] = [
       { method: 'GET', path: '/api/dialogs/{phone}/messages/new', page: '/dialogs' },
       { method: 'GET', path: '/api/dialogs/{phone}/messages/search', page: '/dialogs' },
       { method: 'GET', path: '/api/dialogs/{phone}/messages/stream', page: '/dialogs' },
+      { method: 'WS', path: '/api/dialogs/{phone}/messages/ws', page: '/dialogs' },
       { method: 'GET', path: '/api/dialogs/{phone}/pinned', page: '/dialogs' },
       { method: 'GET', path: '/api/dialogs/{phone}/messages/{id}/photo', page: '/dialogs' },
       { method: 'GET', path: '/api/dialogs/{phone}/messages/{id}/media', page: '/dialogs' },

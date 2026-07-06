@@ -23,6 +23,11 @@ async def lifespan(app: FastAPI):
     init_db()
     conversation_job_store.recover_orphaned_jobs()
     yield
+    from .services.telegram.listener import telegram_listener
+    from .services.telegram.pool import telethon_client_pool
+
+    await telegram_listener.shutdown()
+    await telethon_client_pool.shutdown()
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)

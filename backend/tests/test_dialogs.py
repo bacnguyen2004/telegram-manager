@@ -1,3 +1,4 @@
+from app.services.realtime import message_poll
 from app.services.telegram import dialogs
 
 
@@ -305,6 +306,164 @@ async def test_search_dialog_messages_success(client, monkeypatch):
     assert body["success"] is True
     assert captured["query"] == "hello"
     assert body["data"]["messages"][0]["id"] == 77
+
+
+def _sample_message(message_id: int = 88) -> dict:
+    return {
+        "id": message_id,
+        "date": "01/07/2026 12:00:00",
+        "sender_id": "1",
+        "sender_name": "A",
+        "outgoing": False,
+        "content_type": "text",
+        "has_media": False,
+        "has_photo": False,
+        "text": "hello stream",
+        "edited": False,
+        "edited_date": "",
+        "reactions": [],
+    }
+
+
+async def test_ws_dialog_messages_stream(client, monkeypatch):
+    from app.services.realtime import message_ws
+
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "telegram_realtime_mode", "polling")
+    fresh_manager = message_ws.MessageWsManager(max_connections_per_phone=10, ping_interval=60.0)
+    monkeypatch.setattr(message_ws, "message_ws_manager", fresh_manager)
+    monkeypatch.setattr("app.routers.dialogs.message_ws_manager", fresh_manager)
+
+    calls = {"count": 0}
+
+    async def mock_get_new_messages(
+        phone: str,
+        peer_id: str,
+        min_id: int,
+        limit: int = 50,
+    ):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {
+                "status": "success",
+                "phone": phone,
+                "peer_id": peer_id,
+                "messages": [],
+                "message": "OK",
+            }
+        if calls["count"] == 2:
+            return {
+                "status": "success",
+                "phone": phone,
+                "peer_id": peer_id,
+                "messages": [_sample_message()],
+                "message": "OK",
+            }
+        return {
+            "status": "success",
+            "phone": phone,
+            "peer_id": peer_id,
+            "messages": [],
+            "message": "OK",
+        }
+
+    def mock_dialog_preview_from_row(row: dict) -> dict:
+        return {
+            "last_message": row["text"],
+            "last_message_id": row["id"],
+            "date": row["date"],
+        }
+
+    monkeypatch.setattr(
+        dialogs.telegram_dialog_service,
+        "get_new_messages",
+        mock_get_new_messages,
+    )
+    monkeypatch.setattr(
+        dialogs.telegram_dialog_service,
+        "_dialog_preview_from_row",
+        mock_dialog_preview_from_row,
+    )
+    monkeypatch.setattr(message_poll, "DEFAULT_POLL_INTERVAL", 0.01)
+
+    with client.websocket_connect(
+        "/api/dialogs/%2B84901234567/messages/ws",
+        params={"peer_id": "123456789", "min_id": 1},
+    ) as websocket:
+        first = websocket.receive_json()
+        if first["type"] == "connected":
+            connected = first
+            payload = websocket.receive_json()
+        else:
+            payload = first
+            connected = websocket.receive_json()
+        assert connected["type"] == "connected"
+        assert connected["cursor"] == 1
+        assert payload["type"] == "messages"
+        assert payload["messages"][0]["id"] == 88
+        assert payload["dialog_preview"]["peer_id"] == "123456789"
+
+
+async def test_iter_dialog_message_poll(monkeypatch):
+    calls = {"count": 0}
+
+    async def mock_get_new_messages(
+        phone: str,
+        peer_id: str,
+        min_id: int,
+        limit: int = 50,
+    ):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {
+                "status": "success",
+                "phone": phone,
+                "peer_id": peer_id,
+                "messages": [_sample_message(91)],
+                "message": "OK",
+            }
+        return {
+            "status": "success",
+            "phone": phone,
+            "peer_id": peer_id,
+            "messages": [],
+            "message": "OK",
+        }
+
+    def mock_dialog_preview_from_row(row: dict) -> dict:
+        return {
+            "last_message": row["text"],
+            "last_message_id": row["id"],
+            "date": row["date"],
+        }
+
+    monkeypatch.setattr(
+        dialogs.telegram_dialog_service,
+        "get_new_messages",
+        mock_get_new_messages,
+    )
+    monkeypatch.setattr(
+        dialogs.telegram_dialog_service,
+        "_dialog_preview_from_row",
+        mock_dialog_preview_from_row,
+    )
+    monkeypatch.setattr(message_poll, "DEFAULT_POLL_INTERVAL", 0.01)
+
+    payloads = []
+    async for payload in message_poll.iter_dialog_message_poll(
+        "+84901234567",
+        "123456789",
+        1,
+    ):
+        payloads.append(payload)
+        if len(payloads) >= 2:
+            break
+
+    assert payloads[0]["type"] == "connected"
+    assert payloads[1]["type"] == "messages"
+    assert payloads[1]["messages"][0]["id"] == 91
+    assert payloads[1]["dialog_preview"]["peer_id"] == "123456789"
 
 
 async def test_mark_dialog_read_error(client, monkeypatch):

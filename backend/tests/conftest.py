@@ -32,6 +32,8 @@ def test_paths(tmp_path, monkeypatch):
     db_file = tmp_path / "test.db"
     monkeypatch.setattr(settings, "database_url", f"sqlite:///{db_file.as_posix()}")
     monkeypatch.setattr(settings, "database_enabled", True)
+    monkeypatch.setattr(settings, "telegram_listener_enabled", False)
+    monkeypatch.setattr(settings, "telegram_realtime_mode", "polling")
     reset_engine()
     init_db()
 

@@ -27,6 +27,9 @@ import { avatarHue, dialogInitials, mediaTypeLabel } from '../utils/avatar'
 import { clearDraft, loadDraft, saveDraft } from '../utils/dialogDraftStorage'
 import { mergeDialogsWithReadState, saveReadState } from '../utils/dialogReadStorage'
 import {
+  applyDeletedMessage,
+  applyEditedMessage,
+  applyMessageReactions,
   inferHasMoreOlder,
   isStaleMessagesRequest,
   mergeNewMessages,
@@ -941,6 +944,61 @@ export function DialogsPage() {
     [scrollToLatest],
   )
 
+  const handleStreamResync = useCallback(
+    (cursor: number) => {
+      if (!selected) return
+      if (cursor > 0) {
+        setStreamMinId(cursor)
+      }
+      void loadMessages(selected, false)
+    },
+    [selected],
+  )
+
+  const handleStreamEdited = useCallback((edited: DialogMessageItem) => {
+    setMessages((prev) => {
+      const next = applyEditedMessage(prev, edited)
+      messagesSnapshotRef.current = next
+      return next
+    })
+  }, [])
+
+  const handleStreamDeleted = useCallback((messageId: number) => {
+    setMessages((prev) => {
+      const next = applyDeletedMessage(prev, messageId)
+      messagesSnapshotRef.current = next
+      return next
+    })
+  }, [])
+
+  const handleStreamReaction = useCallback(
+    (messageId: number, reactions: DialogMessageItem['reactions']) => {
+      setMessages((prev) => {
+        const next = applyMessageReactions(prev, messageId, reactions)
+        messagesSnapshotRef.current = next
+        return next
+      })
+    },
+    [],
+  )
+
+  const handleStreamRead = useCallback(
+    (maxId: number, unreadCount: number) => {
+      const dialogId = selectedDialogIdRef.current
+      if (!dialogId) return
+      const patchDialog = (dialog: DialogItem): DialogItem => {
+        if (dialog.id !== dialogId) return dialog
+        return { ...dialog, unread_count: unreadCount }
+      }
+      setDialogs((prev) => prev.map(patchDialog))
+      setSelected((prev) => (prev?.id === dialogId ? patchDialog(prev) : prev))
+      if (maxId > 0) {
+        setStreamMinId((prev) => (prev > 0 ? Math.max(prev, maxId) : prev))
+      }
+    },
+    [],
+  )
+
   useDialogMessageStream({
     phone,
     peerId: selected?.id ?? '',
@@ -954,6 +1012,11 @@ export function DialogsPage() {
         !messageSearch.trim(),
     ),
     onMessages: handleStreamMessages,
+    onResyncRequired: handleStreamResync,
+    onMessageEdited: handleStreamEdited,
+    onMessageDeleted: handleStreamDeleted,
+    onReaction: handleStreamReaction,
+    onRead: handleStreamRead,
   })
 
   useEffect(() => {
