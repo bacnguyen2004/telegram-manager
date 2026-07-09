@@ -611,3 +611,50 @@ export interface ProxyBulkAssignResult {
   proxy_count?: number
   pairs?: ProxyBulkAssignPair[]
 }
+
+export type AutoProfileRegion = 'global' | 'vietnam' | 'mix'
+export type AutoProfileAvatarMode = 'keep' | 'delete' | 'url'
+
+export interface AutoProfileRow {
+  phone: string
+  region: string
+  first_name: string
+  last_name: string
+  username: string
+  about: string
+  avatar_mode: AutoProfileAvatarMode
+  avatar_url: string
+  avatar_label: string
+}
+
+export interface AutoProfilePreviewPayload {
+  phones: string[]
+  region: AutoProfileRegion
+  delete_old_avatar: boolean
+}
+
+export interface AutoProfilePreviewData {
+  total: number
+  items: AutoProfileRow[]
+}
+
+export interface AutoProfileApplyPayload {
+  phone: string
+  first_name: string
+  last_name: string
+  username: string
+  about: string
+  avatar_mode: AutoProfileAvatarMode
+  avatar_url: string
+  region?: string
+  avatar_label?: string
+}
+
+export interface AutoProfileApplyData {
+  status: string
+  phone: string
+  message: string
+  applied_username?: string | null
+  profile?: Record<string, unknown> | null
+  avatar?: Record<string, unknown> | null
+}

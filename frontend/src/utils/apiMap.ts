@@ -5,6 +5,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/sessions?add=1': 'Thêm tài khoản',
   '/roster': 'Sổ tài khoản',
   '/proxy': 'Proxy',
+  '/auto-profile': 'Auto hồ sơ',
   '/dialogs': 'Tin nhắn',
   '/groups': 'Nhóm & kênh',
   '/tasks': 'Tác vụ hàng loạt',
@@ -161,6 +162,14 @@ export const apiMap: ApiMapGroup[] = [
       { method: 'GET', path: '/api/proxies/assignments', page: '/proxy' },
       { method: 'PUT', path: '/api/proxies/assignments/{phone}', page: '/proxy' },
       { method: 'POST', path: '/api/proxies/assignments/bulk', page: '/proxy' },
+    ],
+  },
+  {
+    group: 'auto-profile',
+    label: 'Auto hồ sơ',
+    items: [
+      { method: 'POST', path: '/api/auto-profile/preview', page: '/auto-profile' },
+      { method: 'POST', path: '/api/auto-profile/apply', page: '/auto-profile' },
     ],
   },
 ]

@@ -84,6 +84,24 @@ const navSections: { label: string; items: NavItem[] }[] = [
         ),
       },
       {
+        to: '/auto-profile',
+        label: 'Auto hồ sơ',
+        end: false,
+        accent: 'indigo',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+            <path
+              d="M5 19c1.5-3.5 4-5 7-5s5.5 1.5 7 5"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+            />
+            <path d="M16 4.5l1.2.4.4 1.2.4-1.2L19 4.5l-1.2-.4L17.4 3l-.4 1.1L16 4.5Z" fill="currentColor" />
+          </svg>
+        ),
+      },
+      {
         to: '/groups',
         label: 'Nhóm & kênh',
         end: false,

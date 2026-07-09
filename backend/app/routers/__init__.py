@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from . import (
     auth,
+    auto_profile,
     conversation,
     dialogs,
     groups,
@@ -25,3 +26,4 @@ api_router.include_router(metadata.router)
 api_router.include_router(roster.router)
 api_router.include_router(proxies.router)
 api_router.include_router(conversation.router)
+api_router.include_router(auto_profile.router)

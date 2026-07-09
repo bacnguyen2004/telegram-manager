@@ -15,7 +15,7 @@ from telethon.tl.functions.account import (
     UpdateProfileRequest,
     UpdateUsernameRequest,
 )
-from telethon.tl.functions.photos import DeletePhotosRequest
+from telethon.tl.functions.photos import DeletePhotosRequest, UploadProfilePhotoRequest
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.types import InputPhoto
 
@@ -343,12 +343,27 @@ class ProfileService(SessionService):
         except Exception as exc:
             return self._profile_result("error", phone, message=str(exc))
 
+    @staticmethod
+    def _image_file_suffix(file_bytes: bytes) -> str:
+        """Pick temp file extension from magic bytes (DiceBear/UI return PNG)."""
+        if file_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+            return ".png"
+        if file_bytes.startswith(b"\xff\xd8\xff"):
+            return ".jpg"
+        if len(file_bytes) >= 12 and file_bytes[:4] == b"RIFF" and file_bytes[8:12] == b"WEBP":
+            return ".webp"
+        if file_bytes.startswith(b"GIF8"):
+            return ".gif"
+        return ".jpg"
+
     async def upload_avatar(self, phone: str, file_bytes: bytes) -> dict:
         settings.validate_telegram_config()
 
         phone = phone.strip()
         if not phone:
             return self._avatar_update_result("error", phone, message="Thieu phone")
+        if not file_bytes:
+            return self._avatar_update_result("error", phone, message="File anh trong")
 
         session_file = (self.session_dir / phone).with_suffix(".session")
         if not session_file.exists():
@@ -360,7 +375,8 @@ class ProfileService(SessionService):
 
         temp_path: str | None = None
         try:
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
+            suffix = self._image_file_suffix(file_bytes)
+            with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as temp_file:
                 temp_file.write(file_bytes)
                 temp_path = temp_file.name
 
@@ -374,7 +390,9 @@ class ProfileService(SessionService):
                         message="Session chua dang nhap hoac da het han",
                     )
 
-                await client.upload_profile_photo(temp_path)
+                # Telethon has no client.upload_profile_photo — upload file then set profile photo.
+                uploaded = await client.upload_file(temp_path)
+                await client(UploadProfilePhotoRequest(file=uploaded))
                 has_avatar, avatar_path = await self._sync_avatar(client, phone)
                 me = await client.get_me()
                 display = " ".join(
@@ -395,7 +413,7 @@ class ProfileService(SessionService):
                     action="sessions.avatar.upload",
                     resource=phone,
                     status="success",
-                    detail={"has_avatar": has_avatar},
+                    detail={"has_avatar": has_avatar, "format": suffix.lstrip(".")},
                 )
                 return self._avatar_update_result(
                     "success",

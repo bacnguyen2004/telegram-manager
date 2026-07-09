@@ -1,6 +1,7 @@
 export {
   api,
   authApi,
+  autoProfileApi,
   conversationApi,
   dialogsApi,
   groupsApi,

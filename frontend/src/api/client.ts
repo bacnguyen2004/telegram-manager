@@ -3,6 +3,7 @@
  * Domain modules live alongside this file for smaller, focused edits.
  */
 import { authApi } from './auth'
+import { autoProfileApi } from './autoProfile'
 import { conversationApi } from './conversation'
 import { dialogsApi } from './dialogs'
 import { groupsApi } from './groups'
@@ -24,6 +25,7 @@ export const api = {
   ...rosterApi,
   ...proxiesApi,
   ...conversationApi,
+  ...autoProfileApi,
 }
 
 export type ApiClient = typeof api
@@ -31,6 +33,7 @@ export type ApiClient = typeof api
 // Named domain exports for optional direct imports
 export {
   authApi,
+  autoProfileApi,
   conversationApi,
   dialogsApi,
   groupsApi,

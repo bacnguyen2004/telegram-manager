@@ -30,7 +30,7 @@ telegram-manager/
 └── frontend/    # React + Vite — port 5173 (proxy /api)
 ```
 
-**73 REST endpoint** · response envelope `{ success, data, error }` · OpenAPI tại `/docs`
+**75 REST endpoint** · response envelope `{ success, data, error }` · OpenAPI tại `/docs`
 
 ---
 
@@ -135,6 +135,7 @@ docker compose up --build
 | Tài khoản | `/sessions` | Liệt kê, kiểm tra live, chi tiết, avatar, xóa session |
 | Sổ tài khoản | `/roster` | Bảng acc, cột tùy chỉnh, import CSV |
 | **Proxy** | `/proxy` | Pool SOCKS5/HTTP/MTProto, gán acc, chia đều, test, import list |
+| Auto hồ sơ | `/auto-profile` | Random tên/username/bio/avatar, preview, áp dụng hàng loạt |
 | Nhóm & kênh | `/groups` | Join/leave, quét danh sách |
 | Tin nhắn | `/dialogs` | Chat UI — đọc/gửi/media/reaction |
 | Tác vụ hàng loạt | `/tasks` | Pipeline join/react/vote/reply nhiều acc |
@@ -203,7 +204,7 @@ Xem trên UI tại `/audit` hoặc `GET /api/metadata/audit`.
 
 ---
 
-## API (73 endpoints)
+## API (75 endpoints)
 
 Mọi response: `{ "success": true|false, "data": ..., "error": null|"..." }`
 
@@ -333,6 +334,18 @@ Mọi response: `{ "success": true|false, "data": ..., "error": null|"..." }`
 | POST | `/api/conversation/jobs/{job_id}/resume` | Hội thoại tự nhiên |
 | POST | `/api/conversation/jobs/{job_id}/lines/{line_id}/retry` | Hội thoại tự nhiên |
 | POST | `/api/conversation/jobs/{job_id}/stop` | Hội thoại tự nhiên |
+
+</details>
+
+<details>
+<summary><strong>Auto hồ sơ (2)</strong></summary>
+
+| Method | Endpoint | Trang UI |
+|--------|----------|----------|
+| POST | `/api/auto-profile/preview` | Auto hồ sơ |
+| POST | `/api/auto-profile/apply` | Auto hồ sơ |
+
+> Preview random tên/username/bio/avatar; apply từng acc (profile + avatar URL/xóa).
 
 </details>
 

@@ -51,6 +51,17 @@ def test_auth_timestamp_accepts_datetime():
     assert TelegramSessionService._auth_timestamp(1_700_000_000) == "2023-11-14T22:13:20+00:00"
 
 
+def test_image_file_suffix_from_magic_bytes():
+    from app.services.telegram.accounts import TelegramSessionService
+
+    png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+    jpg = b"\xff\xd8\xff\xe0" + b"\x00" * 16
+    webp = b"RIFF" + b"\x00\x00\x00\x00" + b"WEBP" + b"\x00" * 8
+    assert TelegramSessionService._image_file_suffix(png) == ".png"
+    assert TelegramSessionService._image_file_suffix(jpg) == ".jpg"
+    assert TelegramSessionService._image_file_suffix(webp) == ".webp"
+
+
 async def test_list_authorizations_success(client, test_paths, monkeypatch):
     from app.services.telegram import telegram_session_service
 

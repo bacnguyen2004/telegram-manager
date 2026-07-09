@@ -40,6 +40,24 @@ const quickLinks = [
     ),
   },
   {
+    key: 'auto-profile',
+    to: '/auto-profile',
+    label: 'Auto hồ sơ',
+    desc: 'Random tên, bio, avatar hàng loạt',
+    accent: 'indigo',
+    icon: (
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
+        <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+        <path
+          d="M5 19c1.5-3.5 4-5 7-5s5.5 1.5 7 5"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+        />
+      </svg>
+    ),
+  },
+  {
     key: 'groups',
     to: '/groups',
     label: 'Nhóm & kênh',

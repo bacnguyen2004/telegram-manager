@@ -10,6 +10,7 @@ const routes: RouteObject[] = [
       { index: true, element: null },
       { path: 'sessions', element: null },
       { path: 'roster', element: null },
+      { path: 'auto-profile', element: null },
       { path: 'groups', element: null },
     ],
   },
@@ -21,6 +22,12 @@ describe('app routes', () => {
     const matches = matchRoutes(routes, '/roster')
     expect(matches).not.toBeNull()
     expect(matches?.some((m) => m.route.path === 'roster')).toBe(true)
+  })
+
+  it('matches /auto-profile under layout', () => {
+    const matches = matchRoutes(routes, '/auto-profile')
+    expect(matches).not.toBeNull()
+    expect(matches?.some((m) => m.route.path === 'auto-profile')).toBe(true)
   })
 
   it('does not send /roster to splat only', () => {
