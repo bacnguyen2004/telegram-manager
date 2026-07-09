@@ -12,7 +12,7 @@ from ..schemas.dialogs import (
     MarkDialogReadRequest,
 )
 from ..services.realtime import iter_dialog_message_poll, message_ws_manager
-from ..services.telegram.dialogs import telegram_dialog_service
+from ..services.telegram import telegram_dialog_service
 from ..utils.responses import success_response
 
 

@@ -1,10 +1,8 @@
-from .auth import telegram_auth_service
-from .dialogs import telegram_dialog_service
-from .groups import telegram_group_service
+from .accounts import telegram_auth_service, telegram_session_service
+from .actions import telegram_group_service, telegram_message_service
+from .chats import telegram_dialog_service
+from .client import telethon_client_pool
 from .listener import telegram_listener
-from .messages import telegram_message_service
-from .pool import telethon_client_pool
-from .sessions import telegram_session_service
 
 __all__ = [
     "telegram_auth_service",

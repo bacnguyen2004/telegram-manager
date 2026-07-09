@@ -1,14 +1,12 @@
 import asyncio
 import json
 import uuid
-from dataclasses import dataclass, field
-from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from ...config import settings
-from ..telegram.dialogs import telegram_dialog_service
+from ..telegram.chats import telegram_dialog_service
 from .events import (
     STREAM_EVENT_CONNECTED,
     STREAM_EVENT_ERROR,
@@ -17,31 +15,11 @@ from .events import (
     STREAM_EVENT_RESYNC_REQUIRED,
     filter_new_messages,
 )
-from .message_poll import iter_dialog_message_poll
-
-PollPayload = dict[str, Any]
+from .poller import iter_dialog_message_poll
+from .rooms import MessageStreamRoom, PollPayload, WsSubscriber
 
 DEFAULT_MAX_CONNECTIONS_PER_PHONE = 10
 DEFAULT_PING_INTERVAL_SECONDS = 30.0
-
-
-@dataclass
-class WsSubscriber:
-    websocket: WebSocket
-    subscriber_id: str
-    min_id: int
-    last_seen_id: int
-
-
-@dataclass
-class MessageStreamRoom:
-    phone: str
-    peer_id: str
-    cursor: int
-    subscribers: dict[str, WsSubscriber] = field(default_factory=dict)
-    poll_task: asyncio.Task[None] | None = None
-    ping_task: asyncio.Task[None] | None = None
-    seen_message_ids: set[int] = field(default_factory=set)
 
 
 class MessageWsManager:
@@ -218,7 +196,7 @@ class MessageWsManager:
 
         room.cursor = max(room.cursor, max(int(item["id"]) for item in fresh))
         latest = fresh[-1]
-        preview = telegram_dialog_service._dialog_preview_from_row(latest)
+        preview = telegram_dialog_service.dialog_preview_from_row(latest)
         preview["peer_id"] = room.peer_id
 
         await self._send(

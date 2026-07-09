@@ -11,7 +11,7 @@ from telethon.tl.types import (
 )
 
 from app.routers import messages
-from app.services.telegram.messages import TelegramMessageService
+from app.services.telegram.actions import TelegramMessageService
 
 
 def _answer(label: str, option: bytes) -> SimpleNamespace:

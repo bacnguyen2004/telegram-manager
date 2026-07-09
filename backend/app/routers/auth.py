@@ -14,7 +14,7 @@ from ..schemas.auth import (
     UpdatePrivacyRequest,
 )
 from ..schemas.common import ApiEnvelope
-from ..services.telegram.auth import telegram_auth_service
+from ..services.telegram import telegram_auth_service
 from ..utils.responses import success_response
 
 

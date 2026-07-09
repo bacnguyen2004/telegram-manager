@@ -7,7 +7,7 @@ from pathlib import Path
 
 from telethon import TelegramClient
 
-from ...config import session_lock, settings
+from ....config import session_lock, settings
 
 logger = logging.getLogger(__name__)
 

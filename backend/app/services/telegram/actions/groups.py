@@ -11,9 +11,9 @@ from telethon.errors import (
 from telethon.tl.functions.channels import JoinChannelRequest, LeaveChannelRequest
 from telethon.tl.functions.messages import ImportChatInviteRequest
 
-from ...config import settings
-from ...db import metadata_store
-from .client import telethon_session
+from ....config import settings
+from ....db import metadata_store
+from ..client import telethon_session
 
 
 class TelegramGroupService:

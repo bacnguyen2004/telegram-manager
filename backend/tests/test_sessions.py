@@ -44,7 +44,7 @@ def test_list_authorizations_session_not_found(client):
 def test_auth_timestamp_accepts_datetime():
     from datetime import datetime, timezone
 
-    from app.services.telegram.sessions import TelegramSessionService
+    from app.services.telegram.accounts import TelegramSessionService
 
     value = datetime(2026, 7, 1, 10, 0, 0, tzinfo=timezone.utc)
     assert TelegramSessionService._auth_timestamp(value) == "2026-07-01T10:00:00+00:00"
@@ -52,7 +52,7 @@ def test_auth_timestamp_accepts_datetime():
 
 
 async def test_list_authorizations_success(client, test_paths, monkeypatch):
-    from app.services.telegram import sessions
+    from app.services.telegram import telegram_session_service
 
     phone = "+84901234567"
     (test_paths["session_dir"] / f"{phone}.session").write_bytes(b"fake-session")
@@ -84,7 +84,7 @@ async def test_list_authorizations_success(client, test_paths, monkeypatch):
         }
 
     monkeypatch.setattr(
-        sessions.telegram_session_service,
+        telegram_session_service,
         "list_authorizations",
         mock_list_authorizations,
     )
@@ -102,7 +102,7 @@ async def test_list_authorizations_success(client, test_paths, monkeypatch):
 
 
 async def test_revoke_authorization_success(client, test_paths, monkeypatch):
-    from app.services.telegram import sessions
+    from app.services.telegram import telegram_session_service
 
     phone = "+84901234567"
     (test_paths["session_dir"] / f"{phone}.session").write_bytes(b"fake-session")
@@ -116,7 +116,7 @@ async def test_revoke_authorization_success(client, test_paths, monkeypatch):
         }
 
     monkeypatch.setattr(
-        sessions.telegram_session_service,
+        telegram_session_service,
         "revoke_authorization",
         mock_revoke_authorization,
     )
@@ -136,7 +136,7 @@ def test_get_session_avatar_not_found(client):
 
 
 async def test_update_session_profile_success(client, test_paths, monkeypatch):
-    from app.services.telegram import sessions
+    from app.services.telegram import telegram_session_service
 
     phone = "+84901234567"
     (test_paths["session_dir"] / f"{phone}.session").write_bytes(b"fake-session")
@@ -162,7 +162,7 @@ async def test_update_session_profile_success(client, test_paths, monkeypatch):
         }
 
     monkeypatch.setattr(
-        sessions.telegram_session_service,
+        telegram_session_service,
         "update_profile",
         mock_update_profile,
     )
@@ -216,7 +216,7 @@ def test_get_session_avatar_success(client, test_paths):
 
 
 async def test_revoke_authorization_error(client, test_paths, monkeypatch):
-    from app.services.telegram import sessions
+    from app.services.telegram import telegram_session_service
 
     phone = "+84901234567"
     (test_paths["session_dir"] / f"{phone}.session").write_bytes(b"fake-session")
@@ -230,7 +230,7 @@ async def test_revoke_authorization_error(client, test_paths, monkeypatch):
         }
 
     monkeypatch.setattr(
-        sessions.telegram_session_service,
+        telegram_session_service,
         "revoke_authorization",
         mock_revoke_authorization,
     )

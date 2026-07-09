@@ -1,5 +1,5 @@
-from app.services.realtime import message_poll
-from app.services.telegram import dialogs
+from app.services.realtime import poller as message_poll
+from app.services.telegram import telegram_dialog_service
 
 
 async def test_get_message_photo_success(client, monkeypatch):
@@ -7,7 +7,7 @@ async def test_get_message_photo_success(client, monkeypatch):
         return b"\xff\xd8\xff fake-jpeg", "image/jpeg"
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_message_photo",
         mock_get_message_photo,
     )
@@ -26,7 +26,7 @@ async def test_get_message_photo_not_found(client, monkeypatch):
         return {"status": "error", "message": "Tin nhan khong co anh"}
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_message_photo",
         mock_get_message_photo,
     )
@@ -50,7 +50,7 @@ async def test_mark_dialog_read_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "mark_dialog_read",
         mock_mark_dialog_read,
     )
@@ -101,7 +101,7 @@ async def test_get_messages_with_offset_id(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_messages",
         mock_get_messages,
     )
@@ -144,7 +144,7 @@ async def test_get_messages_without_offset_id(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_messages",
         mock_get_messages,
     )
@@ -192,7 +192,7 @@ async def test_get_messages_has_more_older(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_messages",
         mock_get_messages,
     )
@@ -237,7 +237,7 @@ async def test_get_pinned_messages_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_pinned_messages",
         mock_get_pinned_messages,
     )
@@ -291,7 +291,7 @@ async def test_search_dialog_messages_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "search_messages",
         mock_search_messages,
     )
@@ -326,12 +326,12 @@ def _sample_message(message_id: int = 88) -> dict:
 
 
 async def test_ws_dialog_messages_stream(client, monkeypatch):
-    from app.services.realtime import message_ws
-
     from app.config import settings
+    from app.services.realtime import manager as message_ws
+    from app.services.realtime.manager import MessageWsManager
 
     monkeypatch.setattr(settings, "telegram_realtime_mode", "polling")
-    fresh_manager = message_ws.MessageWsManager(max_connections_per_phone=10, ping_interval=60.0)
+    fresh_manager = MessageWsManager(max_connections_per_phone=10, ping_interval=60.0)
     monkeypatch.setattr(message_ws, "message_ws_manager", fresh_manager)
     monkeypatch.setattr("app.routers.dialogs.message_ws_manager", fresh_manager)
 
@@ -376,12 +376,12 @@ async def test_ws_dialog_messages_stream(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_new_messages",
         mock_get_new_messages,
     )
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "_dialog_preview_from_row",
         mock_dialog_preview_from_row,
     )
@@ -439,12 +439,12 @@ async def test_iter_dialog_message_poll(monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_new_messages",
         mock_get_new_messages,
     )
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "_dialog_preview_from_row",
         mock_dialog_preview_from_row,
     )
@@ -478,7 +478,7 @@ async def test_mark_dialog_read_error(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "mark_dialog_read",
         mock_mark_dialog_read,
     )

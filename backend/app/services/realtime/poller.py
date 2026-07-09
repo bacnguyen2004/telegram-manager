@@ -1,10 +1,9 @@
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Any
 
-from ..telegram.dialogs import telegram_dialog_service
+from ..telegram.chats import telegram_dialog_service
 
-PollPayload = dict[str, Any]
 IsCancelled = Callable[[], bool] | Callable[[], Awaitable[bool]]
 
 DEFAULT_POLL_INTERVAL = 2.0
@@ -28,7 +27,7 @@ async def iter_dialog_message_poll(
     poll_interval: float = DEFAULT_POLL_INTERVAL,
     heartbeat_idle_ticks: int = DEFAULT_HEARTBEAT_IDLE_TICKS,
     is_cancelled: IsCancelled | None = None,
-) -> Any:
+) -> AsyncIterator[dict[str, Any]]:
     cursor = min_id
     idle_ticks = 0
 
@@ -49,7 +48,7 @@ async def iter_dialog_message_poll(
             if messages:
                 cursor = max(int(cursor), max(int(item["id"]) for item in messages))
                 latest = messages[-1]
-                preview = telegram_dialog_service._dialog_preview_from_row(latest)
+                preview = telegram_dialog_service.dialog_preview_from_row(latest)
                 preview["peer_id"] = str(peer_id)
                 yield {
                     "type": "messages",

@@ -12,7 +12,7 @@ from ..schemas.roster import (
     RosterImportResult,
     RosterRowItem,
 )
-from ..services.telegram.sessions import telegram_session_service
+from ..services.telegram import telegram_session_service
 from ..utils.responses import success_response
 
 

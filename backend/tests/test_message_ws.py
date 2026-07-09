@@ -4,9 +4,10 @@ import pytest
 from starlette.websockets import WebSocketDisconnect, WebSocketState
 
 from app.config import settings
-from app.services.realtime import message_poll, message_ws
-from app.services.realtime.message_ws import MessageWsManager
-from app.services.telegram import dialogs
+from app.services.realtime import manager as message_ws
+from app.services.realtime import poller as message_poll
+from app.services.realtime.manager import MessageWsManager
+from app.services.telegram import telegram_dialog_service
 
 
 def _sample_message(message_id: int = 88) -> dict:
@@ -60,12 +61,12 @@ def _install_poll_mocks(monkeypatch, *, first_batch_id: int = 88) -> dict:
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_new_messages",
         mock_get_new_messages,
     )
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "_dialog_preview_from_row",
         mock_dialog_preview_from_row,
     )
@@ -159,12 +160,12 @@ async def test_manager_shared_poll_for_multiple_subscribers(manager, monkeypatch
         }
 
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "get_new_messages",
         mock_get_new_messages,
     )
     monkeypatch.setattr(
-        dialogs.telegram_dialog_service,
+        telegram_dialog_service,
         "_dialog_preview_from_row",
         lambda row: {
             "last_message": row["text"],

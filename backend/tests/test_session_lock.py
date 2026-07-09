@@ -93,7 +93,7 @@ async def test_telethon_session_uses_lock_for_same_phone(test_paths):
 
     async def run() -> None:
         with patch(
-            "app.services.telegram.client.TelegramClient",
+            "app.services.telegram.client.session.TelegramClient",
             return_value=fake_client,
         ):
             async with telethon_session(phone, 123456, "hash", session_dir):

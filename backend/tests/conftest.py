@@ -4,15 +4,21 @@ from fastapi.testclient import TestClient
 from app.config import session_lock, settings
 from app.db import init_db, reset_engine
 from app.main import app
-from app.services.telegram import auth, dialogs, groups, messages, sessions
+from app.services.telegram import (
+    telegram_auth_service,
+    telegram_dialog_service,
+    telegram_group_service,
+    telegram_message_service,
+    telegram_session_service,
+)
 
 
 TELEGRAM_SERVICES = (
-    sessions.telegram_session_service,
-    auth.telegram_auth_service,
-    groups.telegram_group_service,
-    dialogs.telegram_dialog_service,
-    messages.telegram_message_service,
+    telegram_session_service,
+    telegram_auth_service,
+    telegram_group_service,
+    telegram_dialog_service,
+    telegram_message_service,
 )
 
 

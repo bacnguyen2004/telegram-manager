@@ -4,9 +4,9 @@ from typing import Any, Callable
 
 from telethon import events
 
-from ...config import settings
-from .dialogs import telegram_dialog_service
-from .pool import telethon_client_pool
+from ....config import settings
+from ..chats import telegram_dialog_service
+from ..client import telethon_client_pool
 
 logger = logging.getLogger(__name__)
 
@@ -206,11 +206,11 @@ class TelegramListenerService:
         async with telethon_client_pool.locked_client(phone) as client:
             me = await client.get_me()
             me_id = getattr(me, "id", None)
-            sender_names = await telegram_dialog_service._resolve_sender_names(
+            sender_names = await telegram_dialog_service.resolve_sender_names(
                 client,
                 [message],
             )
-            return telegram_dialog_service._build_message_row(
+            return telegram_dialog_service.build_message_row(
                 message,
                 me_id=me_id,
                 sender_names=sender_names,
@@ -229,10 +229,10 @@ class TelegramListenerService:
         if row is None:
             return
 
-        preview = telegram_dialog_service._dialog_preview_from_row(row)
+        preview = telegram_dialog_service.dialog_preview_from_row(row)
         preview["peer_id"] = peer_id
 
-        from ..realtime.message_ws import message_ws_manager
+        from ...realtime.manager import message_ws_manager
 
         await message_ws_manager.publish_incoming_message(
             phone,
@@ -254,7 +254,7 @@ class TelegramListenerService:
         if row is None:
             return
 
-        from ..realtime.message_ws import message_ws_manager
+        from ...realtime.manager import message_ws_manager
 
         await message_ws_manager.publish_edited(phone, peer_id, row)
 
@@ -279,7 +279,7 @@ class TelegramListenerService:
         if not deleted_ids:
             return
 
-        from ..realtime.message_ws import message_ws_manager
+        from ...realtime.manager import message_ws_manager
 
         for message_id in deleted_ids:
             await message_ws_manager.publish_deleted(phone, peer_id, int(message_id))
@@ -294,7 +294,7 @@ class TelegramListenerService:
         if not peer_id or max_id < 1:
             return
 
-        from ..realtime.message_ws import message_ws_manager
+        from ...realtime.manager import message_ws_manager
 
         await message_ws_manager.publish_read(
             phone,

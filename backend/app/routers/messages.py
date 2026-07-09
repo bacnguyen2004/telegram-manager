@@ -24,7 +24,7 @@ from ..schemas.messages import (
     VotePollData,
     VotePollRequest,
 )
-from ..services.telegram.messages import telegram_message_service
+from ..services.telegram import telegram_message_service
 from ..utils.responses import success_response
 
 

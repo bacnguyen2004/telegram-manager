@@ -6,8 +6,9 @@ import pytest
 from starlette.websockets import WebSocketState
 
 from app.config import settings
-from app.services.realtime import message_ws
-from app.services.realtime.message_ws import MessageWsManager
+from app.services.realtime import manager as message_ws
+from app.services.realtime.manager import MessageWsManager
+from app.services.realtime.rooms import MessageStreamRoom, WsSubscriber
 from app.services.telegram import listener as listener_module
 from app.services.telegram.listener import TelegramListenerService
 
@@ -44,8 +45,6 @@ def ws_manager(monkeypatch) -> MessageWsManager:
 
 
 async def test_publish_incoming_message_broadcasts_to_room(ws_manager):
-    from app.services.realtime.message_ws import MessageStreamRoom, WsSubscriber
-
     room_key = ws_manager.room_key("+84901234567", "123456789")
     fake_socket = MagicMock()
     fake_socket.client_state = WebSocketState.CONNECTED
@@ -189,7 +188,7 @@ async def test_ws_manager_event_mode_uses_listener_without_poll(monkeypatch):
     )
 
     manager = MessageWsManager(max_connections_per_phone=5, ping_interval=60.0)
-    room = message_ws.MessageStreamRoom(
+    room = MessageStreamRoom(
         phone="+84901234567",
         peer_id="123456789",
         cursor=1,

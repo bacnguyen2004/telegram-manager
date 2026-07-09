@@ -1,4 +1,4 @@
-from app.services.telegram import messages
+from app.services.telegram import telegram_message_service
 
 
 async def test_send_message_success(client, monkeypatch):
@@ -13,7 +13,7 @@ async def test_send_message_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "send_message",
         mock_send_message,
     )
@@ -49,7 +49,7 @@ async def test_send_message_service_error(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "send_message",
         mock_send_message,
     )
@@ -86,7 +86,7 @@ async def test_reply_message_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "reply_message",
         mock_reply_message,
     )
@@ -120,7 +120,7 @@ async def test_delete_message_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "delete_message",
         mock_delete_message,
     )
@@ -156,7 +156,7 @@ async def test_send_media_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "send_media",
         mock_send_media,
     )
@@ -200,7 +200,7 @@ async def test_send_media_accepts_pdf(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "send_media",
         mock_send_media,
     )
@@ -255,7 +255,7 @@ async def test_forward_message_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "forward_message",
         mock_forward_message,
     )
@@ -295,7 +295,7 @@ async def test_pin_message_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "pin_message",
         mock_pin_message,
     )
@@ -330,7 +330,7 @@ async def test_send_reaction_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "send_reaction",
         mock_send_reaction,
     )
@@ -367,7 +367,7 @@ async def test_send_reaction_not_allowed(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "send_reaction",
         mock_send_reaction,
     )
@@ -401,7 +401,7 @@ async def test_remove_reaction_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "remove_reaction",
         mock_remove_reaction,
     )
@@ -433,7 +433,7 @@ async def test_edit_message_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "edit_message",
         mock_edit_message,
     )
@@ -475,7 +475,7 @@ async def test_forward_messages_bulk_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "forward_messages",
         mock_forward_messages,
     )
@@ -514,7 +514,7 @@ async def test_delete_messages_bulk_success(client, monkeypatch):
         }
 
     monkeypatch.setattr(
-        messages.telegram_message_service,
+        telegram_message_service,
         "delete_messages",
         mock_delete_messages,
     )

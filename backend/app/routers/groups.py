@@ -9,7 +9,7 @@ from ..schemas.groups import (
     LeaveAllGroupsRequest,
     LeaveGroupRequest,
 )
-from ..services.telegram.groups import telegram_group_service
+from ..services.telegram import telegram_group_service
 from ..utils.responses import success_response
 
 

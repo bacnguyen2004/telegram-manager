@@ -4,9 +4,10 @@ import pytest
 from starlette.websockets import WebSocketState
 
 from app.config import settings
-from app.services.realtime import message_ws
+from app.services.realtime import manager as message_ws
 from app.services.realtime.events import filter_new_messages
-from app.services.realtime.message_ws import MessageStreamRoom, MessageWsManager, WsSubscriber
+from app.services.realtime.manager import MessageWsManager
+from app.services.realtime.rooms import MessageStreamRoom, WsSubscriber
 
 
 @pytest.fixture
