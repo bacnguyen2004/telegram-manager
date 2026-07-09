@@ -17,11 +17,12 @@
 Monorepo gồm backend Telethon/MTProto và frontend React. Một dashboard thống nhất để:
 
 - Thêm và quản lý file `.session` (OTP / 2FA)
+- Gán **proxy SOCKS5 / HTTP / MTProto** theo account (pool, chia đều, test)
 - Join/leave nhóm, quét danh sách nhóm
 - Đọc/gửi tin nhắn, reaction, poll, media
 - Chạy tác vụ hàng loạt trên nhiều tài khoản
 - Chạy **hội thoại tự nhiên** (kịch bản nhiều vai, delay, typing)
-- Xem **nhật ký hoạt động** khi bật PostgreSQL
+- Xem **nhật ký hoạt động** khi bật database
 
 ```
 telegram-manager/
@@ -29,16 +30,17 @@ telegram-manager/
 └── frontend/    # React + Vite — port 5173 (proxy /api)
 ```
 
-**64 REST endpoint** · response envelope `{ success, data, error }` · OpenAPI tại `/docs`
+**73 REST endpoint** · response envelope `{ success, data, error }` · OpenAPI tại `/docs`
 
 ---
 
 ## Điểm nổi bật
 
 - **Session lock hai lớp** (`asyncio` + file lock) — an toàn khi nhiều request/worker cùng mở `.session`
+- **Proxy per session** — pool, gán 1–nhiều, chia đều (round-robin), test TCP, import list
 - **Chat workspace**: pagination, unread, mark-read, gửi/reply/ảnh/forward/edit/pin
 - **Tác vụ hàng loạt** và **hội thoại tự nhiên** với monitor tiến độ trên UI
-- **PostgreSQL metadata**: `session_meta`, `group_scans`, `audit_logs` (login, nhóm, hội thoại)
+- **Metadata DB**: `session_meta`, `proxies`, `group_scans`, `audit_logs`, roster
 - **Sổ tài khoản** với cột tùy chỉnh lưu DB
 - Docker Compose full-stack, CI (pytest + vitest + build), light/dark theme
 
@@ -56,23 +58,43 @@ telegram-manager/
 
 ## Screenshots
 
-| Tổng quan | Tài khoản | Sổ tài khoản |
-|-----------|-----------|--------------|
-| ![Tổng quan](docs/screenshots/dashboard.png) | ![Tài khoản](docs/screenshots/sessions.png) | ![Sổ tài khoản](docs/screenshots/roster.png) |
+> Ảnh full-width theo nhóm. Click ảnh trên GitHub để xem lớn. Chụp lại khi đổi UI: [`docs/screenshots/README.md`](docs/screenshots/README.md)
 
-| Tin nhắn | Nhóm & kênh | Tác vụ hàng loạt |
-|----------|-------------|------------------|
-| ![Tin nhắn](docs/screenshots/dialogs.png) | ![Nhóm & kênh](docs/screenshots/groups.png) | ![Tác vụ hàng loạt](docs/screenshots/tasks.png) |
+### Quản lý tài khoản
 
-| Hội thoại tự nhiên | Nhật ký hoạt động | Bảo mật |
-|--------------------|-------------------|---------|
-| ![Hội thoại tự nhiên](docs/screenshots/conversation.png) | ![Nhật ký hoạt động](docs/screenshots/audit.png) | ![Bảo mật](docs/screenshots/security.png) |
+| Tổng quan | Tài khoản |
+|:---------:|:---------:|
+| <img src="docs/screenshots/dashboard.png" alt="Tổng quan — dashboard thống kê & lối tắt" width="100%" /> | <img src="docs/screenshots/sessions.png" alt="Tài khoản — session, check live, avatar" width="100%" /> |
+| **Tổng quan** · `/` | **Tài khoản** · `/sessions` |
+
+| Sổ tài khoản | Proxy |
+|:------------:|:-----:|
+| <img src="docs/screenshots/roster.png" alt="Sổ tài khoản — bảng cột tùy chỉnh" width="100%" /> | <img src="docs/screenshots/proxy.png" alt="Proxy — gán SOCKS5/HTTP/MTProto, pool, chia đều, test" width="100%" /> |
+| **Sổ tài khoản** · `/roster` | **Proxy** · `/proxy` |
+
+### Chat, nhóm & automation
+
+| Tin nhắn | Nhóm & kênh |
+|:--------:|:-----------:|
+| <img src="docs/screenshots/dialogs.png" alt="Tin nhắn — chat workspace" width="100%" /> | <img src="docs/screenshots/groups.png" alt="Nhóm & kênh — join/leave, quét" width="100%" /> |
+| **Tin nhắn** · `/dialogs` | **Nhóm & kênh** · `/groups` |
+
+| Tác vụ hàng loạt | Hội thoại tự nhiên |
+|:----------------:|:------------------:|
+| <img src="docs/screenshots/tasks.png" alt="Tác vụ hàng loạt — pipeline multi-acc" width="100%" /> | <img src="docs/screenshots/conversation.png" alt="Hội thoại tự nhiên — kịch bản nhiều vai" width="100%" /> |
+| **Tác vụ hàng loạt** · `/tasks` | **Hội thoại tự nhiên** · `/conversation` |
+
+### Bảo mật & hệ thống
+
+| Bảo mật | Nhật ký hoạt động |
+|:-------:|:-----------------:|
+| <img src="docs/screenshots/security.png" alt="Bảo mật — 2FA, privacy invite" width="100%" /> | <img src="docs/screenshots/audit.png" alt="Nhật ký hoạt động — audit log" width="100%" /> |
+| **Bảo mật** · `/security` | **Nhật ký hoạt động** · `/audit` |
 
 | Trạng thái API |
-|----------------|
-| ![Trạng thái API](docs/screenshots/health.png) |
-
-Chụp lại ảnh sau khi đổi UI: [`docs/screenshots/README.md`](docs/screenshots/README.md)
+|:--------------:|
+| <img src="docs/screenshots/health.png" alt="Trạng thái API — health check" width="70%" /> |
+| **Trạng thái API** · `/health` |
 
 ---
 
@@ -99,6 +121,7 @@ docker compose up --build
 1. Mở http://localhost:5173/sessions?add=1
 2. Nhập số điện thoại → OTP → mã (và 2FA nếu có)
 3. Vào **Tài khoản** (`/sessions`) — xác nhận file `.session` trên disk
+4. (Tuỳ chọn) **Proxy** (`/proxy`) — import pool, gán / chia đều proxy cho acc
 
 > Đăng nhập Telegram trên điện thoại **không** tự tạo session cho API này.
 
@@ -108,9 +131,10 @@ docker compose up --build
 
 | Trang | Route | Mô tả |
 |-------|-------|-------|
-| Tổng quan | `/` | Thống kê, lối tắt, bản đồ 64 API |
+| Tổng quan | `/` | Thống kê, lối tắt, bản đồ API |
 | Tài khoản | `/sessions` | Liệt kê, kiểm tra live, chi tiết, avatar, xóa session |
-| Sổ tài khoản | `/roster` | Bảng acc, cột tùy chỉnh, import |
+| Sổ tài khoản | `/roster` | Bảng acc, cột tùy chỉnh, import CSV |
+| **Proxy** | `/proxy` | Pool SOCKS5/HTTP/MTProto, gán acc, chia đều, test, import list |
 | Nhóm & kênh | `/groups` | Join/leave, quét danh sách |
 | Tin nhắn | `/dialogs` | Chat UI — đọc/gửi/media/reaction |
 | Tác vụ hàng loạt | `/tasks` | Pipeline join/react/vote/reply nhiều acc |
@@ -118,6 +142,13 @@ docker compose up --build
 | Bảo mật | `/security` | Đổi 2FA, privacy invite hàng loạt |
 | Nhật ký hoạt động | `/audit` | Audit log + lịch sử quét nhóm |
 | Trạng thái API | `/health` | Backend, Telegram config, session dir, DB |
+
+### Proxy (tóm tắt)
+
+- **Pool**: thêm 1 proxy, import nhiều dòng (`host:port`, `host:port:user:pass`, `type|host|port|…`)
+- **Gán**: 1 proxy → nhiều account, hoặc **chia đều** (round-robin) từ pool
+- **Test**: từng proxy hoặc Test all; trạng thái OK/Lỗi lưu trên pool
+- **Yêu cầu**: database bật (`DATABASE_URL` / SQLite mặc định)
 
 ---
 
@@ -129,12 +160,12 @@ docker compose up --build
 app/
 ├── main.py                      # FastAPI lifespan, mount /api
 ├── config.py                    # Settings, session lock
-├── db/                          # SQLModel + metadata store
-├── routers/                     # health, auth, sessions, roster, groups,
-│                                # dialogs, messages, conversation, metadata
+├── db/                          # SQLModel, metadata, proxy_store, roster_store
+├── routers/                     # health, auth, sessions, roster, proxies,
+│                                # groups, dialogs, messages, conversation, metadata
 ├── schemas/                     # Pydantic request/response
 ├── services/
-│   ├── telegram/                # Telethon (sessions, groups, dialogs, messages…)
+│   ├── telegram/                # Telethon (client pool, groups, dialogs, proxy…)
 │   └── conversation/            # Parser, validator, job runner, audit
 └── utils/
     ├── session_lock.py          # Per-phone asyncio + file lock
@@ -150,7 +181,13 @@ Mỗi `phone` ↔ một file `.session`. Telethon không an toàn khi truy cập
 | `asyncio.Lock` | Nhiều request trong cùng process |
 | File `runtime/locks/{phone}.lock` | Nhiều process / worker |
 
-### Nhật ký audit (PostgreSQL)
+### Proxy per session
+
+- Bảng `proxies` + `session_meta.proxy_id` (0..1 proxy / account)
+- Telethon client pool inject SOCKS5 / HTTP / MTProto khi tạo client
+- Gán / gỡ proxy → drop client trong pool để kết nối lại qua endpoint mới
+
+### Nhật ký audit (database)
 
 Ghi vào `audit_logs` khi `DATABASE_ENABLED=true`:
 
@@ -158,14 +195,15 @@ Ghi vào `audit_logs` khi `DATABASE_ENABLED=true`:
 |-------------|-------|
 | `auth.*` | `auth.login` |
 | `sessions.*` | import, sync, delete, cập nhật profile |
+| `proxy.*` | create, assign, assign_bulk, check, delete |
 | `groups.*` | join, leave, leave_all, scan |
-| `conversation.*` | `conversation.start`, `conversation.run` (job hội thoại) |
+| `conversation.*` | `conversation.start`, `conversation.run` |
 
 Xem trên UI tại `/audit` hoặc `GET /api/metadata/audit`.
 
 ---
 
-## API (64 endpoints)
+## API (73 endpoints)
 
 Mọi response: `{ "success": true|false, "data": ..., "error": null|"..." }`
 
@@ -208,6 +246,25 @@ Mọi response: `{ "success": true|false, "data": ..., "error": null|"..." }`
 | PATCH | `/api/roster/columns/{column_key}` | Sổ tài khoản |
 | DELETE | `/api/roster/columns/{column_key}` | Sổ tài khoản |
 | POST | `/api/roster/import` | Sổ tài khoản |
+
+</details>
+
+<details>
+<summary><strong>Proxy (9)</strong></summary>
+
+| Method | Endpoint | Trang UI |
+|--------|----------|----------|
+| GET | `/api/proxies` | Proxy |
+| POST | `/api/proxies` | Proxy |
+| GET | `/api/proxies/{id}` | Proxy |
+| PATCH | `/api/proxies/{id}` | Proxy |
+| DELETE | `/api/proxies/{id}` | Proxy |
+| POST | `/api/proxies/{id}/check` | Proxy |
+| GET | `/api/proxies/assignments` | Proxy |
+| PUT | `/api/proxies/assignments/{phone}` | Proxy |
+| POST | `/api/proxies/assignments/bulk` | Proxy |
+
+> Bulk assign hỗ trợ `mode=same` (mọi phone cùng 1 proxy) và `mode=round_robin` (chia đều pool). Cần database bật.
 
 </details>
 
@@ -364,7 +421,9 @@ CI chạy pytest + vitest + build trên mỗi push/PR tới `main`.
 | `TG_SESSION_LOCK_TIMEOUT` | Chờ lock tối đa (giây) | `120` |
 | `TG_SESSION_LOCK_STALE_SECONDS` | Xóa lock stale sau crash | `300` |
 | `DATABASE_URL` | PostgreSQL hoặc SQLite | SQLite (`runtime/telegram_manager.db`) |
-| `DATABASE_ENABLED` | Bật metadata / audit | `true` |
+| `DATABASE_ENABLED` | Bật metadata / audit / **proxy** | `true` |
+
+> Proxy pool & gán account **cần database**. SQLite local đủ dùng; Docker dùng PostgreSQL.
 
 Ba cách cấu hình DB (SQLite local / Postgres dev / Docker full): xem `backend/.env.example`.
 
@@ -392,4 +451,4 @@ Volumes: `telegram-sessions`, `telegram-locks`, `postgres-data`.
 
 [bacnguyen2004](https://github.com/bacnguyen2004)
 
-Dự án portfolio: **full-stack**, **REST API design**, **Telegram/MTProto**, **Docker**, **automated testing**.
+Dự án portfolio: **full-stack**, **REST API design**, **Telegram/MTProto**, **proxy multi-acc**, **Docker**, **automated testing**.
