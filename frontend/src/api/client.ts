@@ -9,6 +9,7 @@ import { groupsApi } from './groups'
 import { healthApi } from './health'
 import { messagesApi } from './messages'
 import { metadataApi } from './metadata'
+import { proxiesApi } from './proxies'
 import { rosterApi } from './roster'
 import { sessionsApi } from './sessions'
 
@@ -21,6 +22,7 @@ export const api = {
   ...messagesApi,
   ...metadataApi,
   ...rosterApi,
+  ...proxiesApi,
   ...conversationApi,
 }
 
@@ -35,6 +37,7 @@ export {
   healthApi,
   messagesApi,
   metadataApi,
+  proxiesApi,
   rosterApi,
   sessionsApi,
 }

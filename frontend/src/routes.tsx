@@ -11,6 +11,7 @@ import { SessionsPage } from './pages/SessionsPage'
 import { ConversationPage } from './pages/ConversationPage'
 import { TasksPage } from './pages/TasksPage'
 import { RosterPage } from './pages/RosterPage'
+import { ProxyPage } from './pages/ProxyPage'
 
 export const appRouter = createBrowserRouter([
   {
@@ -20,6 +21,7 @@ export const appRouter = createBrowserRouter([
       { index: true, element: <DashboardPage /> },
       { path: 'sessions', element: <SessionsPage /> },
       { path: 'roster', element: <RosterPage /> },
+      { path: 'proxy', element: <ProxyPage /> },
       { path: 'groups', element: <GroupsPage /> },
       { path: 'dialogs', element: <DialogsPage /> },
       { path: 'tasks', element: <TasksPage /> },

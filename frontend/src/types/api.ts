@@ -545,3 +545,69 @@ export interface RosterImportResult {
   new_columns: number
 }
 
+
+export type ProxyType = 'socks5' | 'http' | 'mtproto'
+
+export interface ProxyItem {
+  id: number
+  name: string
+  proxy_type: string
+  host: string
+  port: number
+  username: string
+  password_set: boolean
+  secret_set: boolean
+  enabled: boolean
+  last_check_status: string | null
+  last_check_at: string | null
+  last_check_message: string
+  assigned_count: number
+  created_at: string | null
+  updated_at: string | null
+  password?: string | null
+  secret?: string | null
+}
+
+export interface ProxyListData {
+  database_enabled: boolean
+  total: number
+  proxies: ProxyItem[]
+}
+
+export interface ProxyAssignmentItem {
+  phone: string
+  proxy_id: number | null
+  proxy_name: string | null
+  proxy_type: string | null
+  proxy_host: string | null
+  proxy_port: number | null
+}
+
+export interface ProxyAssignmentsData {
+  database_enabled: boolean
+  assignments: ProxyAssignmentItem[]
+}
+
+export interface ProxyCheckData {
+  id: number
+  status: string
+  message: string
+  last_check_at: string | null
+}
+
+export interface ProxyBulkAssignPair {
+  phone: string
+  proxy_id: number
+  proxy_name?: string
+}
+
+export interface ProxyBulkAssignResult {
+  status: string
+  proxy_id: number | null
+  updated: number
+  phones: string[]
+  message?: string
+  mode?: 'same' | 'round_robin' | string
+  proxy_count?: number
+  pairs?: ProxyBulkAssignPair[]
+}

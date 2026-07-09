@@ -69,11 +69,17 @@ class TelethonClientPool:
                         pass
                     state.client = None
 
+                from ..proxy import telethon_proxy_for_phone
+
+                proxy = telethon_proxy_for_phone(phone)
+                client_kwargs: dict = {"auto_reconnect": True}
+                if proxy is not None:
+                    client_kwargs["proxy"] = proxy
                 client = TelegramClient(
                     str(self._session_base(phone)),
                     self.api_id,
                     self.api_hash,
-                    auto_reconnect=True,
+                    **client_kwargs,
                 )
                 await client.connect()
                 if not await client.is_user_authorized():
@@ -143,6 +149,22 @@ class TelethonClientPool:
         if state.client and state.client.is_connected():
             return state.client
         return None
+
+    async def drop_client(self, phone: str) -> None:
+        """Force-disconnect pooled client so next op reconnects (e.g. after proxy change)."""
+        phone = phone.strip()
+        if not phone:
+            return
+        state = await self._get_state(phone)
+        async with state.connect_lock:
+            state.refcount = 0
+            state.listener_refs = 0
+            if state.client is not None:
+                try:
+                    await state.client.disconnect()
+                except Exception:
+                    logger.exception("TelethonClientPool drop_client failed for %s", phone)
+                state.client = None
 
     async def shutdown(self) -> None:
         async with self._registry_lock:

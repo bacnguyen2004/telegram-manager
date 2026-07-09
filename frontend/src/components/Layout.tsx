@@ -67,6 +67,23 @@ const navSections: { label: string; items: NavItem[] }[] = [
         ),
       },
       {
+        to: '/proxy',
+        label: 'Proxy',
+        end: false,
+        accent: 'teal',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M4 12h4l2-6 4 12 2-6h4"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ),
+      },
+      {
         to: '/groups',
         label: 'Nhóm & kênh',
         end: false,

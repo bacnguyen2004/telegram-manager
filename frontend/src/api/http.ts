@@ -2,6 +2,19 @@ import type { ApiEnvelope } from '../types/api'
 
 export const API_BASE = '/api'
 
+function toEnvelope<T>(response: Response, body: unknown): ApiEnvelope<T> {
+  const data = body as ApiEnvelope<T> & { detail?: unknown }
+  if (!response.ok) {
+    const detail = data?.detail
+    const message =
+      typeof detail === 'string'
+        ? detail
+        : data?.error || `HTTP ${response.status}`
+    return { success: false, data: null, error: message }
+  }
+  return data as ApiEnvelope<T>
+}
+
 export async function requestForm<T>(
   path: string,
   formData: FormData,
@@ -20,7 +33,7 @@ export async function requestForm<T>(
   }
 
   try {
-    return (await response.json()) as ApiEnvelope<T>
+    return toEnvelope<T>(response, await response.json())
   } catch {
     throw new Error(
       `Phản hồi không hợp lệ từ API (HTTP ${response.status}). Có thể proxy trỏ sai port backend.`,
@@ -52,7 +65,7 @@ export async function request<T>(
   }
 
   try {
-    return (await response.json()) as ApiEnvelope<T>
+    return toEnvelope<T>(response, await response.json())
   } catch {
     throw new Error(
       `Phản hồi không hợp lệ từ API (HTTP ${response.status}). Có thể proxy trỏ sai port backend.`,

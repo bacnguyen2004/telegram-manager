@@ -7,6 +7,27 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class Proxy(SQLModel, table=True):
+    """Outbound proxy used by Telethon clients (SOCKS5 / HTTP / MTProto)."""
+
+    __tablename__ = "proxies"
+
+    id: int | None = Field(default=None, primary_key=True)
+    name: str = Field(max_length=128)
+    proxy_type: str = Field(default="socks5", max_length=16)  # socks5 | http | mtproto
+    host: str = Field(max_length=255)
+    port: int = Field(ge=1, le=65535)
+    username: str | None = Field(default=None, max_length=128)
+    password: str | None = Field(default=None, max_length=256)
+    secret: str | None = Field(default=None, max_length=128)  # mtproto secret
+    enabled: bool = Field(default=True)
+    last_check_status: str | None = Field(default=None, max_length=16)
+    last_check_at: datetime | None = Field(default=None)
+    last_check_message: str | None = Field(default=None, max_length=500)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
+
+
 class SessionMeta(SQLModel, table=True):
     """Business metadata for a Telethon session file (phone = natural key)."""
 
@@ -26,6 +47,7 @@ class SessionMeta(SQLModel, table=True):
     avatar_path: str | None = Field(default=None, max_length=256)
     avatar_updated_at: datetime | None = Field(default=None)
     custom_fields: str = Field(default="{}")
+    proxy_id: int | None = Field(default=None, index=True)
 
 
 class RosterColumn(SQLModel, table=True):

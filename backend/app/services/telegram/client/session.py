@@ -23,7 +23,13 @@ async def telethon_session(
 
     async with session_lock.acquire(phone):
         session_base = session_dir / phone.strip()
-        client = TelegramClient(str(session_base), api_id, api_hash)
+        from ..proxy import telethon_proxy_for_phone
+
+        proxy = telethon_proxy_for_phone(phone)
+        client_kwargs: dict = {}
+        if proxy is not None:
+            client_kwargs["proxy"] = proxy
+        client = TelegramClient(str(session_base), api_id, api_hash, **client_kwargs)
         await client.connect()
         try:
             yield client
