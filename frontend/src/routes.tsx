@@ -13,6 +13,7 @@ import { TasksPage } from './pages/TasksPage'
 import { RosterPage } from './pages/RosterPage'
 import { ProxyPage } from './pages/ProxyPage'
 import { AutoProfilePage } from './pages/AutoProfilePage'
+import { CampaignPage } from './pages/CampaignPage'
 
 export const appRouter = createBrowserRouter([
   {
@@ -28,6 +29,7 @@ export const appRouter = createBrowserRouter([
       { path: 'dialogs', element: <DialogsPage /> },
       { path: 'tasks', element: <TasksPage /> },
       { path: 'conversation', element: <ConversationPage /> },
+      { path: 'campaign', element: <CampaignPage /> },
       { path: 'audit', element: <AuditPage /> },
       { path: 'health', element: <HealthPage /> },
       { path: 'auth', element: <Navigate to="/sessions?add=1" replace /> },

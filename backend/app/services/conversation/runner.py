@@ -1,6 +1,7 @@
 import asyncio
 import random
 import re
+import time
 
 from ...schemas.conversation import ConversationLineResult, ConversationScriptInput
 from ..telegram import telegram_message_service
@@ -84,6 +85,7 @@ class ConversationRunner:
         results_by_id = {
             item.line_id: item for item in conversation_job_store.get_line_results(job_id)
         }
+        schedule_mode = self._uses_schedule(script)
 
         sent_ids: dict[int, int] = {}
         previous_speaker_id: str | None = None
@@ -95,6 +97,9 @@ class ConversationRunner:
                 sent_ids[line.id] = existing.message_id
                 previous_message_id = existing.message_id
                 previous_speaker_id = line.speaker_id
+
+        # Absolute schedule clock (resume-safe: anchor after last successful at_sec)
+        start_mono = self._schedule_start_mono(ordered_lines, results_by_id)
 
         completed = sum(
             1
@@ -155,13 +160,59 @@ class ConversationRunner:
                 script.reply_on_speaker_change,
             )
 
-            typing_seconds = self._pick_typing_delay(script)
+            typing_wanted = self._pick_typing_delay(script, line.text)
+            typing_seconds = typing_wanted
+            wait_before = 0.0
+            at_sec = getattr(line, "at_sec", None)
+
+            if schedule_mode:
+                # Fold typing INTO the script gap so total time tracks at_sec
+                target_at = int(at_sec) if at_sec is not None else None
+                if target_at is None:
+                    # Inject / line without at_sec: small gap after previous schedule
+                    target_at = int(time.monotonic() - start_mono) + 3
+                remaining = (start_mono + target_at) - time.monotonic()
+                wait_before, typing_seconds = self.fold_typing_into_remaining(
+                    remaining, typing_wanted
+                )
+                if wait_before > 0.05:
+                    wait_i = max(1, int(round(wait_before)))
+                    wait_result = ConversationLineResult(
+                        line_id=line.id,
+                        speaker_id=line.speaker_id,
+                        phone=phone,
+                        status="pending",
+                        detail=self._wait_detail(
+                            wait_i,
+                            False,
+                            schedule_at=target_at,
+                            typing_sec=typing_seconds,
+                        ),
+                        reply_to_msg_id=reply_to,
+                    )
+                    conversation_job_store.update_line_result(
+                        job_id,
+                        wait_result,
+                        completed_lines=completed,
+                        success_lines=success_count,
+                        error_lines=error_count,
+                    )
+                    await self._sleep_with_stop(job_id, wait_before)
+                    if conversation_job_store.should_stop(job_id):
+                        self._finish_job(job_id, "stopped", only_line_id=only_line_id)
+                        return
+
             running = ConversationLineResult(
                 line_id=line.id,
                 speaker_id=line.speaker_id,
                 phone=phone,
                 status="running",
-                detail=self._running_detail(typing_seconds, reply_to, line.reply_to),
+                detail=self._running_detail(
+                    typing_seconds,
+                    reply_to,
+                    line.reply_to,
+                    schedule_at=int(at_sec) if schedule_mode and at_sec is not None else None,
+                ),
                 reply_to_msg_id=reply_to,
             )
             conversation_job_store.update_line_result(
@@ -252,7 +303,22 @@ class ConversationRunner:
             if only_line_id is not None:
                 break
 
-            if index < len(ordered_lines) - 1:
+            # Pick up live-injected lines while job is still running
+            if only_line_id is None:
+                job_fresh = conversation_job_store.get(job_id)
+                if job_fresh is not None:
+                    script = conversation_job_store.load_script(job_fresh)
+                    speakers = {item.id: item for item in script.speakers}
+                    peer_id = (script.peer_id or script.group_link).strip()
+                    schedule_mode = self._uses_schedule(script)
+                    new_ordered = sorted(script.lines, key=lambda item: item.id)
+                    if len(new_ordered) > len(ordered_lines):
+                        ordered_lines.extend(new_ordered[len(ordered_lines) :])
+                    for item in conversation_job_store.get_line_results(job_id):
+                        results_by_id[item.line_id] = item
+
+            # Legacy mode only: random gap AFTER send (schedule mode waits BEFORE next line)
+            if not schedule_mode and index < len(ordered_lines) - 1:
                 next_line = ordered_lines[index + 1]
                 speaker_changed = line.speaker_id != next_line.speaker_id
                 delay_seconds = self._pick_delay(script, speaker_changed)
@@ -274,6 +340,167 @@ class ConversationRunner:
                     )
                     await self._sleep_with_stop(job_id, delay_seconds)
 
+        # Final drain: injects that arrived after last original line
+        if only_line_id is None and not conversation_job_store.should_stop(job_id):
+            job_fresh = conversation_job_store.get(job_id)
+            if job_fresh is not None:
+                script = conversation_job_store.load_script(job_fresh)
+                speakers = {item.id: item for item in script.speakers}
+                peer_id = (script.peer_id or script.group_link).strip()
+                results_by_id = {
+                    item.line_id: item
+                    for item in conversation_job_store.get_line_results(job_id)
+                }
+                for line in sorted(script.lines, key=lambda item: item.id):
+                    if conversation_job_store.should_stop(job_id):
+                        self._finish_job(job_id, "stopped", only_line_id=only_line_id)
+                        return
+                    existing = results_by_id.get(line.id)
+                    if existing and existing.status in ("success", "skipped", "error"):
+                        if existing.status == "success" and existing.message_id:
+                            sent_ids[line.id] = existing.message_id
+                        continue
+                    # Process remaining pending (same path as main loop — simplified)
+                    speaker = speakers.get(line.speaker_id)
+                    if speaker is None:
+                        continue
+                    phone = speaker.phone.strip()
+                    reply_to = self._resolve_reply_to(
+                        line,
+                        sent_ids,
+                        previous_speaker_id,
+                        previous_message_id,
+                        script.reply_on_speaker_change,
+                    )
+                    typing_wanted = self._pick_typing_delay(script, line.text)
+                    typing_seconds = typing_wanted
+                    at_sec = getattr(line, "at_sec", None)
+                    if self._uses_schedule(script):
+                        target_at = (
+                            int(at_sec)
+                            if at_sec is not None
+                            else int(time.monotonic() - start_mono) + 3
+                        )
+                        remaining = (start_mono + target_at) - time.monotonic()
+                        wait_before, typing_seconds = self.fold_typing_into_remaining(
+                            remaining, typing_wanted
+                        )
+                        if wait_before > 0.05:
+                            wait_i = max(1, int(round(wait_before)))
+                            wait_result = ConversationLineResult(
+                                line_id=line.id,
+                                speaker_id=line.speaker_id,
+                                phone=phone,
+                                status="pending",
+                                detail=self._wait_detail(
+                                    wait_i,
+                                    False,
+                                    schedule_at=target_at,
+                                    typing_sec=typing_seconds,
+                                ),
+                                reply_to_msg_id=reply_to,
+                            )
+                            conversation_job_store.update_line_result(
+                                job_id,
+                                wait_result,
+                                completed_lines=completed,
+                                success_lines=success_count,
+                                error_lines=error_count,
+                            )
+                            await self._sleep_with_stop(job_id, wait_before)
+                            if conversation_job_store.should_stop(job_id):
+                                self._finish_job(
+                                    job_id, "stopped", only_line_id=only_line_id
+                                )
+                                return
+                    running = ConversationLineResult(
+                        line_id=line.id,
+                        speaker_id=line.speaker_id,
+                        phone=phone,
+                        status="running",
+                        detail=self._running_detail(
+                            typing_seconds,
+                            reply_to,
+                            line.reply_to,
+                            schedule_at=int(at_sec) if at_sec is not None else None,
+                        ),
+                        reply_to_msg_id=reply_to,
+                    )
+                    conversation_job_store.update_line_result(
+                        job_id,
+                        running,
+                        completed_lines=completed,
+                        success_lines=success_count,
+                        error_lines=error_count,
+                    )
+                    if typing_seconds > 0:
+                        await self._typing_with_stop(
+                            job_id, phone, peer_id, typing_seconds
+                        )
+                        if conversation_job_store.should_stop(job_id):
+                            self._finish_job(
+                                job_id, "stopped", only_line_id=only_line_id
+                            )
+                            return
+                    send_result = await self._send_with_flood_retry(
+                        phone, peer_id, line.text, reply_to
+                    )
+                    if send_result.get("status") == "success":
+                        message_id = send_result.get("message_id")
+                        if isinstance(message_id, int):
+                            sent_ids[line.id] = message_id
+                            previous_message_id = message_id
+                        previous_speaker_id = line.speaker_id
+                        result = ConversationLineResult(
+                            line_id=line.id,
+                            speaker_id=line.speaker_id,
+                            phone=phone,
+                            status="success",
+                            message_id=message_id
+                            if isinstance(message_id, int)
+                            else None,
+                            reply_to_msg_id=reply_to,
+                            detail=self._success_detail(
+                                send_result.get("message") or "",
+                                message_id if isinstance(message_id, int) else None,
+                                reply_to,
+                                line.reply_to,
+                                typing_seconds=typing_seconds,
+                            ),
+                        )
+                        completed += 1
+                        success_count += 1
+                    else:
+                        result = ConversationLineResult(
+                            line_id=line.id,
+                            speaker_id=line.speaker_id,
+                            phone=phone,
+                            status="error",
+                            reply_to_msg_id=reply_to,
+                            detail=self._error_detail(
+                                send_result.get("message") or "",
+                                reply_to,
+                                line.reply_to,
+                            ),
+                        )
+                        completed += 1
+                        error_count += 1
+                    results_by_id[line.id] = result
+                    conversation_job_store.update_line_result(
+                        job_id,
+                        result,
+                        completed_lines=completed,
+                        success_lines=success_count,
+                        error_lines=error_count,
+                    )
+                    if result.status == "error" and not script.continue_on_error:
+                        self._finish_job(job_id, "error", only_line_id=only_line_id)
+                        return
+                    if not self._uses_schedule(script):
+                        delay_seconds = self._pick_delay(script, True)
+                        if delay_seconds > 0:
+                            await self._sleep_with_stop(job_id, delay_seconds)
+
         self._finish_job(
             job_id,
             self._resolve_final_status(job_id, error_count),
@@ -281,16 +508,66 @@ class ConversationRunner:
         )
 
     @staticmethod
+    def _uses_schedule(script: ConversationScriptInput) -> bool:
+        if getattr(script, "schedule_mode", False):
+            return True
+        return any(getattr(ln, "at_sec", None) is not None for ln in script.lines)
+
+    @staticmethod
+    def _schedule_start_mono(ordered_lines, results_by_id: dict) -> float:
+        """Monotonic t0 so completed lines' at_sec stay on the absolute schedule."""
+        now = time.monotonic()
+        last_at: int | None = None
+        for line in ordered_lines:
+            existing = results_by_id.get(line.id)
+            if (
+                existing
+                and existing.status == "success"
+                and getattr(line, "at_sec", None) is not None
+            ):
+                last_at = int(line.at_sec)
+        if last_at is not None:
+            return now - float(last_at)
+        return now
+
+    @staticmethod
+    def fold_typing_into_remaining(
+        remaining_sec: float, typing_wanted: int
+    ) -> tuple[float, int]:
+        """Split remaining time until at_sec into (wait_before_typing, typing).
+
+        Typing is counted *inside* the script gap — not added after it.
+        If late (remaining <= 0), only a brief typing flash is kept.
+        """
+        wanted = max(0, int(typing_wanted or 0))
+        if wanted <= 0:
+            return max(0.0, float(remaining_sec)), 0
+        rem = float(remaining_sec)
+        if rem <= 0:
+            return 0.0, min(2, wanted)
+        if rem < 1.0:
+            # Too tight for a visible typing indicator
+            return max(0.0, rem), 0
+        typing = min(wanted, int(rem))
+        typing = max(1, typing)
+        wait = max(0.0, rem - typing)
+        return wait, typing
+
+    @staticmethod
     def _running_detail(
         typing_seconds: int,
         reply_to_msg_id: int | None,
         reply_to_line: int | None,
+        *,
+        schedule_at: int | None = None,
     ) -> str:
         parts: list[str] = []
         if typing_seconds > 0:
             parts.append(f"Dang go ({typing_seconds}s)...")
         else:
             parts.append("Dang gui...")
+        if schedule_at is not None:
+            parts.append(f"t+{schedule_at}s")
         if reply_to_line is not None:
             parts.append(f"Tra loi dong #{reply_to_line}")
         elif reply_to_msg_id is not None:
@@ -298,7 +575,18 @@ class ConversationRunner:
         return " · ".join(parts)
 
     @staticmethod
-    def _wait_detail(delay_seconds: int, speaker_changed: bool) -> str:
+    def _wait_detail(
+        delay_seconds: int,
+        speaker_changed: bool,
+        *,
+        schedule_at: int | None = None,
+        typing_sec: int = 0,
+    ) -> str:
+        if schedule_at is not None:
+            parts = [f"Cho delay ({delay_seconds}s) — lich t+{schedule_at}s"]
+            if typing_sec > 0:
+                parts.append(f"go {typing_sec}s")
+            return " · ".join(parts)
         kind = "doi nguoi" if speaker_changed else "cung nguoi"
         return f"Cho delay ({delay_seconds}s) — {kind}"
 
@@ -433,15 +721,40 @@ class ConversationRunner:
         return random.randint(low, high)
 
     @staticmethod
-    def _pick_typing_delay(script: ConversationScriptInput) -> int:
+    def _pick_typing_delay(script: ConversationScriptInput, text: str = "") -> int:
+        """Duration of Telegram SetTyping ("đang gõ") before send.
+
+        When typing_max_sec > 0 we always return at least 1s so the indicator
+        is visible (even for short acks). Longer text leans toward the high end.
+        """
         timing = script.timing
-        low = timing.typing_min_sec
-        high = timing.typing_max_sec
+        low = int(timing.typing_min_sec)
+        high = int(timing.typing_max_sec)
         if high <= 0:
             return 0
         if low > high:
             low, high = high, low
-        return random.randint(low, high)
+
+        cleaned = (text or "").strip()
+        n = len(cleaned)
+
+        # Length-based base window (phone chat feel), then clamp to [low, high]
+        if n <= 4:
+            base_lo, base_hi = 1, 2
+        elif n <= 12:
+            base_lo, base_hi = 2, 4
+        elif n <= 28:
+            base_lo, base_hi = 2, 5
+        elif n <= 60:
+            base_lo, base_hi = 3, 6
+        else:
+            base_lo, base_hi = 4, 8
+
+        lo = max(low, base_lo) if low > 0 else base_lo
+        hi = max(base_hi, lo)
+        lo = max(1, min(lo, high))  # typing enabled → never skip entirely
+        hi = max(lo, min(hi, high))
+        return random.randint(lo, hi)
 
     async def _typing_with_stop(
         self,
@@ -450,24 +763,31 @@ class ConversationRunner:
         peer_id: str,
         seconds: int,
     ) -> None:
+        """Keep Telegram typing indicator alive for `seconds` (refresh ~every 3s)."""
+        if seconds <= 0:
+            return
         elapsed = 0.0
         last_ping = -10.0
         while elapsed < seconds:
             if conversation_job_store.should_stop(job_id):
                 return
-            if elapsed - last_ping >= 4.0:
+            # Telegram drops "typing…" after ~5s — re-ping every 3s, first at t=0
+            if elapsed - last_ping >= 3.0:
                 await telegram_message_service.send_typing(phone, peer_id)
                 last_ping = elapsed
             step = min(0.5, seconds - elapsed)
             await asyncio.sleep(step)
             elapsed += step
 
-    async def _sleep_with_stop(self, job_id: int, seconds: int) -> None:
+    async def _sleep_with_stop(self, job_id: int, seconds: float | int) -> None:
+        total = max(0.0, float(seconds))
+        if total <= 0:
+            return
         elapsed = 0.0
-        while elapsed < seconds:
+        while elapsed < total:
             if conversation_job_store.should_stop(job_id):
                 return
-            step = min(0.5, seconds - elapsed)
+            step = min(0.5, total - elapsed)
             await asyncio.sleep(step)
             elapsed += step
 

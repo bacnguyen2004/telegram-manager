@@ -32,6 +32,14 @@ class ConversationLineInput(BaseModel):
         ge=1,
         description="Tham chieu id dong dich trong cung script",
     )
+    at_sec: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Lich tuyet doi (giay tu luc start job). "
+            "Khi co at_sec, typing duoc cong don trong cua so cho den moc nay — khong lech kich ban."
+        ),
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -58,6 +66,13 @@ class ConversationScriptInput(BaseModel):
     continue_on_error: bool = Field(
         default=False,
         description="Loi mot cau thi dung job (mac dinh)",
+    )
+    schedule_mode: bool = Field(
+        default=False,
+        description=(
+            "True (campaign): dung at_sec tuyet doi, typing nam trong gap kich ban. "
+            "False: delay ngau nhien + typing cong them (conversation thu cong)."
+        ),
     )
 
 

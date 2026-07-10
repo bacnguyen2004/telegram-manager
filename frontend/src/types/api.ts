@@ -658,3 +658,182 @@ export interface AutoProfileApplyData {
   profile?: Record<string, unknown> | null
   avatar?: Record<string, unknown> | null
 }
+
+export type CampaignRole = 'lead' | 'echo' | 'reactor' | 'lurker' | 'member'
+
+export interface CampaignSpeaker {
+  id: string
+  label: string
+  phone: string
+  role: string
+}
+
+export interface CampaignPlanLine {
+  at_sec: number
+  speaker_id: string
+  action: 'send' | 'reply'
+  text: string
+  reply_to_line: number | null
+}
+
+export interface CampaignPlan {
+  title: string
+  duration_min: number
+  lines: CampaignPlanLine[]
+}
+
+export type CampaignDensity = 'light' | 'normal' | 'dense'
+
+export interface CampaignPlanPayload {
+  goal: string
+  duration_min: number
+  target_lines?: number
+  density?: CampaignDensity
+  language: string
+  group_link: string
+  peer_id?: string | null
+  topic_bullets?: string[]
+  /** Headlines user ticked — AI may only paraphrase these as news topics */
+  selected_news?: string[]
+  /** Must paraphrase at least once each */
+  must_discuss_news?: string[]
+  /** Keyword bias for plan (ETF, SEC…) */
+  news_keywords?: string[]
+  speakers: CampaignSpeaker[]
+  use_market_context?: boolean
+  /** OpenAI model id; omit/empty = server default */
+  model?: string | null
+}
+
+export interface CampaignMarketCoin {
+  id?: string
+  symbol: string
+  usd: number
+  usd_24h_change?: number | null
+  quote_volume?: number | null
+  pair?: string
+}
+
+export interface CampaignMarketNewsItem {
+  title: string
+  source: string
+  published_at: string
+  url?: string
+  tags?: string[]
+}
+
+export interface CampaignMarketContext {
+  fetched_at: string
+  source: string
+  coins: CampaignMarketCoin[]
+  notes: string[]
+  news?: CampaignMarketNewsItem[]
+  news_source?: string
+  news_error?: string | null
+  gainers?: CampaignMarketCoin[]
+  losers?: CampaignMarketCoin[]
+  movers_source?: string
+  movers_error?: string | null
+  brief: string
+  ok: boolean
+  error?: string | null
+  filter_q?: string
+  filter_tags?: string[]
+}
+
+export type CampaignGoalTopic = 'btc_eth' | 'alts' | 'macro' | 'mix'
+export type CampaignGoalTone = 'casual' | 'debate' | 'hype' | 'skeptical'
+export type CampaignGoalConflict = 'none' | 'low' | 'medium'
+export type CampaignGoalMsgLen = 'short' | 'medium'
+
+export interface CampaignGoalDraftPayload {
+  topic: CampaignGoalTopic
+  tone: CampaignGoalTone
+  conflict: CampaignGoalConflict
+  language: string
+  message_length: CampaignGoalMsgLen
+  selected_news?: string[]
+  must_discuss_news?: string[]
+}
+
+export interface CampaignGoalDraftData {
+  goal: string
+  source: string
+}
+
+export interface CampaignInjectPayload {
+  angle?: string
+  selected_news?: string[]
+  line_count?: number
+  use_live_price?: boolean
+  model?: string | null
+}
+
+export interface CampaignInjectData {
+  job_id: number
+  injected_count: number
+  new_total_lines: number
+  lines: CampaignPlanLine[]
+  status: string
+}
+
+export interface CampaignPlanData {
+  plan: CampaignPlan
+  script: Record<string, unknown>
+  validation: {
+    valid: boolean
+    line_count: number
+    issues: Array<{ level: string; code: string; message: string; line_id?: number | null }>
+    script?: Record<string, unknown> | null
+  }
+  market?: CampaignMarketContext | null
+}
+
+export interface CampaignJobCreatePayload {
+  plan: CampaignPlan
+  speakers: CampaignSpeaker[]
+  group_link: string
+  peer_id?: string | null
+}
+
+export interface CampaignJobCreateData {
+  job_id: number
+  status: string
+  total_lines: number
+  title: string
+}
+
+export interface CampaignModelPriceRow {
+  id: string
+  input_per_1m?: number | null
+  output_per_1m?: number | null
+  tier?: string
+  tier_label?: string
+  note?: string
+  known?: boolean
+  cost_index?: number | null
+  price_badge?: string
+}
+
+export interface CampaignPlanCostEstimate {
+  model: string
+  batches_assumed?: number | null
+  input_tokens_assumed?: number | null
+  output_tokens_assumed?: number | null
+  estimate_usd?: number | null
+  note?: string
+}
+
+export interface CampaignAiStatusData {
+  ai_enabled: boolean
+  configured: boolean
+  model: string
+  /** Selectable models for UI picker */
+  models?: string[]
+  model_catalog?: CampaignModelPriceRow[]
+  plan_cost_estimates_150?: CampaignPlanCostEstimate[]
+  pricing_unit?: string
+  pricing_source?: string
+  models_source?: string
+  message: string
+}

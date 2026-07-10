@@ -2,6 +2,7 @@ export {
   api,
   authApi,
   autoProfileApi,
+  campaignApi,
   conversationApi,
   dialogsApi,
   groupsApi,

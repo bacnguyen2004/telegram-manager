@@ -5,7 +5,25 @@ from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+_ENV_FILE = BASE_DIR / ".env"
+
+
+def _load_env(*, override: bool = False) -> None:
+    """Load backend/.env. override=True so file wins over stale empty shell vars."""
+    load_dotenv(_ENV_FILE, override=override)
+
+
+# Initial load (override so local .env is source of truth for AI keys etc.)
+_load_env(override=True)
+
+
+def _env_bool(name: str, default: str = "false") -> bool:
+    raw = (os.getenv(name, default) or default).strip().strip("\"'").lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _env_str(name: str, default: str = "") -> str:
+    return (os.getenv(name, default) or default).strip().strip("\"'")
 
 
 def resolve_project_path(value: str) -> Path:
@@ -62,6 +80,72 @@ class Settings:
     telegram_listener_reconnect_seconds: float = float(
         os.getenv("TELEGRAM_LISTENER_RECONNECT_SECONDS", "15") or 15
     )
+    # Keep Telethon TCP sessions warm between campaign typing/sends (reduces
+    # connect thrash + Windows "Connection._recv_loop GeneratorExit" noise).
+    telegram_client_idle_seconds: float = float(
+        os.getenv("TELEGRAM_CLIENT_IDLE_SECONDS", "120") or 120
+    )
+
+    def reload_ai_env(self) -> None:
+        """Re-read backend/.env for AI settings (uvicorn does not reload on .env change)."""
+        _load_env(override=True)
+
+    @property
+    def ai_enabled(self) -> bool:
+        self.reload_ai_env()
+        return _env_bool("AI_ENABLED", "false")
+
+    @property
+    def openai_api_key(self) -> str:
+        self.reload_ai_env()
+        return _env_str("OPENAI_API_KEY", "")
+
+    @property
+    def openai_model(self) -> str:
+        self.reload_ai_env()
+        return _env_str("OPENAI_MODEL", "gpt-4.1-mini") or "gpt-4.1-mini"
+
+    @property
+    def openai_models(self) -> list[str]:
+        """Selectable models for campaign UI (OPENAI_MODELS=comma list)."""
+        self.reload_ai_env()
+        default = self.openai_model
+        raw = _env_str("OPENAI_MODELS", "")
+        if raw:
+            listed = [m.strip() for m in raw.split(",") if m.strip()]
+        else:
+            # Full default GPT chat catalog (see services.ai.model_catalog)
+            from .services.ai.model_catalog import DEFAULT_GPT_CHAT_MODELS
+
+            listed = list(DEFAULT_GPT_CHAT_MODELS)
+        out: list[str] = []
+        for m in [default, *listed]:
+            if m and m not in out:
+                out.append(m)
+        return out
+
+    @property
+    def openai_temperature(self) -> float:
+        self.reload_ai_env()
+        return float(_env_str("OPENAI_TEMPERATURE", "0.9") or 0.9)
+
+    @property
+    def openai_max_output_tokens(self) -> int:
+        self.reload_ai_env()
+        return int(_env_str("OPENAI_MAX_OUTPUT_TOKENS", "4000") or 4000)
+
+    @property
+    def openai_timeout_seconds(self) -> float:
+        self.reload_ai_env()
+        return float(_env_str("OPENAI_TIMEOUT_SECONDS", "120") or 120)
+
+    @property
+    def ai_configured(self) -> bool:
+        # Single reload for both flags
+        self.reload_ai_env()
+        enabled = _env_bool("AI_ENABLED", "false")
+        key = _env_str("OPENAI_API_KEY", "")
+        return bool(enabled and key)
 
     @property
     def realtime_mode(self) -> str:

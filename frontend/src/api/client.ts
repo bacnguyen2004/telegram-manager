@@ -4,6 +4,7 @@
  */
 import { authApi } from './auth'
 import { autoProfileApi } from './autoProfile'
+import { campaignApi } from './campaign'
 import { conversationApi } from './conversation'
 import { dialogsApi } from './dialogs'
 import { groupsApi } from './groups'
@@ -26,6 +27,7 @@ export const api = {
   ...proxiesApi,
   ...conversationApi,
   ...autoProfileApi,
+  ...campaignApi,
 }
 
 export type ApiClient = typeof api
@@ -34,6 +36,7 @@ export type ApiClient = typeof api
 export {
   authApi,
   autoProfileApi,
+  campaignApi,
   conversationApi,
   dialogsApi,
   groupsApi,

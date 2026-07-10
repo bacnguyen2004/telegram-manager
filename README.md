@@ -140,6 +140,7 @@ docker compose up --build
 | Tin nhắn | `/dialogs` | Chat UI — đọc/gửi/media/reaction |
 | Tác vụ hàng loạt | `/tasks` | Pipeline join/react/vote/reply nhiều acc |
 | Hội thoại tự nhiên | `/conversation` | Kịch bản nhiều vai, preview, monitor job |
+| Chiến dịch | `/campaign` | Goal + AI lập lịch multi-acc → chạy job trong group |
 | Bảo mật | `/security` | Đổi 2FA, privacy invite hàng loạt |
 | Nhật ký hoạt động | `/audit` | Audit log + lịch sử quét nhóm |
 | Trạng thái API | `/health` | Backend, Telegram config, session dir, DB |

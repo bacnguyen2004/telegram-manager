@@ -19,15 +19,57 @@ class _PhoneClientState:
     listener_refs: int = 0
     op_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     connect_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    idle_task: asyncio.Task | None = None
+
+
+async def _safe_disconnect(client: TelegramClient | None, *, phone: str, reason: str) -> None:
+    """Disconnect Telethon client without leaking noisy GeneratorExit on Windows."""
+    if client is None:
+        return
+    try:
+        if client.is_connected():
+            await client.disconnect()
+        # Let cancelled _recv_loop tasks settle before the client is GC'd
+        await asyncio.sleep(0)
+    except (asyncio.CancelledError, GeneratorExit):
+        raise
+    except Exception:
+        logger.debug(
+            "Telethon disconnect (%s) for %s raised; ignored",
+            reason,
+            phone,
+            exc_info=True,
+        )
 
 
 class TelethonClientPool:
+    """Shared Telethon clients per phone.
+
+    Clients stay warm for a short idle window after the last operation so
+    campaign typing/send bursts do not connect/disconnect every second
+    (which surfaces as ``Connection._recv_loop`` GeneratorExit noise).
+    """
+
     def __init__(self, api_id: int, api_hash: str, session_dir: Path) -> None:
         self.api_id = api_id
         self.api_hash = api_hash
         self.session_dir = session_dir
         self._states: dict[str, _PhoneClientState] = {}
         self._registry_lock = asyncio.Lock()
+
+    @property
+    def idle_seconds(self) -> float:
+        # Prefer dedicated env; fall back to listener idle (default 300s)
+        raw = getattr(settings, "telegram_client_idle_seconds", None)
+        if raw is not None:
+            try:
+                return max(5.0, float(raw))
+            except (TypeError, ValueError):
+                pass
+        try:
+            return max(5.0, float(settings.telegram_listener_idle_seconds))
+        except (TypeError, ValueError):
+            return 120.0
 
     def _session_base(self, phone: str) -> Path:
         return self.session_dir / phone.strip()
@@ -44,6 +86,39 @@ class TelethonClientPool:
                 self._states[phone] = state
             return state
 
+    def _cancel_idle(self, state: _PhoneClientState) -> None:
+        task = state.idle_task
+        state.idle_task = None
+        if task is not None and not task.done():
+            task.cancel()
+
+    def _schedule_idle_disconnect(self, phone: str, state: _PhoneClientState) -> None:
+        self._cancel_idle(state)
+        delay = self.idle_seconds
+
+        async def _idle() -> None:
+            try:
+                await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                return
+            await self._idle_disconnect(phone)
+
+        try:
+            state.idle_task = asyncio.create_task(_idle())
+        except RuntimeError:
+            # No running loop (shutdown edge) — disconnect immediately later
+            state.idle_task = None
+
+    async def _idle_disconnect(self, phone: str) -> None:
+        state = await self._get_state(phone)
+        async with state.connect_lock:
+            if state.refcount > 0 or state.listener_refs > 0:
+                return
+            client = state.client
+            state.client = None
+            state.idle_task = None
+        await _safe_disconnect(client, phone=phone, reason="idle")
+
     async def ensure_connected(self, phone: str) -> TelegramClient:
         phone = phone.strip()
         if not phone:
@@ -51,6 +126,7 @@ class TelethonClientPool:
 
         state = await self._get_state(phone)
         async with state.connect_lock:
+            self._cancel_idle(state)
             if state.client and state.client.is_connected():
                 return state.client
 
@@ -63,11 +139,9 @@ class TelethonClientPool:
                     return state.client
 
                 if state.client is not None:
-                    try:
-                        await state.client.disconnect()
-                    except Exception:
-                        pass
+                    old = state.client
                     state.client = None
+                    await _safe_disconnect(old, phone=phone, reason="reconnect")
 
                 from ..proxy import telethon_proxy_for_phone
 
@@ -83,7 +157,7 @@ class TelethonClientPool:
                 )
                 await client.connect()
                 if not await client.is_user_authorized():
-                    await client.disconnect()
+                    await _safe_disconnect(client, phone=phone, reason="unauthorized")
                     state.client = None
                     raise PermissionError("Session chua dang nhap hoac da het han")
 
@@ -95,6 +169,7 @@ class TelethonClientPool:
         client = await self.ensure_connected(phone)
         state.listener_refs += 1
         state.refcount += 1
+        self._cancel_idle(state)
         return client
 
     async def release_listener(self, phone: str) -> None:
@@ -106,24 +181,17 @@ class TelethonClientPool:
     async def _borrow(self, phone: str, state: _PhoneClientState) -> TelegramClient:
         client = await self.ensure_connected(phone)
         state.refcount += 1
+        self._cancel_idle(state)
         return client
 
     async def _release(self, phone: str, state: _PhoneClientState) -> None:
         state.refcount = max(0, state.refcount - 1)
-        if state.refcount > 0:
+        if state.refcount > 0 or state.listener_refs > 0:
             return
-
         if state.client is None:
             return
-
-        async with state.connect_lock:
-            if state.refcount > 0 or state.client is None:
-                return
-            try:
-                await state.client.disconnect()
-            except Exception:
-                logger.exception("TelethonClientPool disconnect failed for %s", phone)
-            state.client = None
+        # Keep connection warm for the next typing/send in campaign / dialogs
+        self._schedule_idle_disconnect(phone, state)
 
     @asynccontextmanager
     async def locked_client(self, phone: str) -> AsyncIterator[TelegramClient]:
@@ -131,6 +199,7 @@ class TelethonClientPool:
         state = await self._get_state(phone)
         async with state.op_lock:
             client = await self.ensure_connected(phone)
+            self._cancel_idle(state)
             yield client
 
     @asynccontextmanager
@@ -156,15 +225,13 @@ class TelethonClientPool:
         if not phone:
             return
         state = await self._get_state(phone)
+        self._cancel_idle(state)
         async with state.connect_lock:
             state.refcount = 0
             state.listener_refs = 0
-            if state.client is not None:
-                try:
-                    await state.client.disconnect()
-                except Exception:
-                    logger.exception("TelethonClientPool drop_client failed for %s", phone)
-                state.client = None
+            client = state.client
+            state.client = None
+        await _safe_disconnect(client, phone=phone, reason="drop")
 
     async def shutdown(self) -> None:
         async with self._registry_lock:
@@ -172,15 +239,13 @@ class TelethonClientPool:
 
         for phone in phones:
             state = await self._get_state(phone)
+            self._cancel_idle(state)
             async with state.connect_lock:
                 state.refcount = 0
                 state.listener_refs = 0
-                if state.client is not None:
-                    try:
-                        await state.client.disconnect()
-                    except Exception:
-                        logger.exception("TelethonClientPool shutdown failed for %s", phone)
-                    state.client = None
+                client = state.client
+                state.client = None
+            await _safe_disconnect(client, phone=phone, reason="shutdown")
 
         async with self._registry_lock:
             self._states.clear()

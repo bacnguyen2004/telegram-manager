@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,4 +35,10 @@ async def telethon_session(
         try:
             yield client
         finally:
-            await client.disconnect()
+            try:
+                if client.is_connected():
+                    await client.disconnect()
+                # Let cancelled Telethon _recv_loop settle (avoids ignored GeneratorExit)
+                await asyncio.sleep(0)
+            except Exception:
+                pass

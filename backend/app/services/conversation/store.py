@@ -280,6 +280,72 @@ class ConversationJobStore:
     def load_script(self, job: ConversationJob) -> ConversationScriptInput:
         return ConversationScriptInput.model_validate_json(job.script_json)
 
+    def append_lines(
+        self,
+        job_id: int,
+        lines: list,
+    ) -> ConversationJob | None:
+        """Append conversation lines + pending results. Only while job active."""
+        from ...schemas.conversation import ConversationLineInput
+
+        if not lines:
+            return self.get(job_id)
+
+        with Session(get_engine()) as session:
+            job = session.get(ConversationJob, job_id)
+            if job is None:
+                return None
+            if job.status not in ("running", "pending"):
+                return None
+            if job.stop_requested:
+                return None
+
+            script = ConversationScriptInput.model_validate_json(job.script_json)
+            results = self._load_line_results(job)
+            existing_ids = {ln.id for ln in script.lines}
+            added = 0
+            for raw in lines:
+                if isinstance(raw, ConversationLineInput):
+                    line = raw
+                else:
+                    line = ConversationLineInput.model_validate(raw)
+                if line.id in existing_ids:
+                    continue
+                script.lines.append(line)
+                existing_ids.add(line.id)
+                phone = self._phone_for_speaker(script, line.speaker_id)
+                results.append(
+                    ConversationLineResult(
+                        line_id=line.id,
+                        speaker_id=line.speaker_id,
+                        phone=phone,
+                        status="pending",
+                        detail="Inject — cho gui",
+                    )
+                )
+                added += 1
+
+            if added == 0:
+                session.refresh(job)
+                return job
+
+            # Cap safety
+            if len(script.lines) > 500:
+                return None
+
+            job.script_json = script.model_dump_json()
+            job.total_lines = len(script.lines)
+            job.line_results_json = json.dumps(
+                [item.model_dump() for item in results],
+                ensure_ascii=False,
+            )
+            job.updated_at = _utc_now()
+            session.add(job)
+            session.commit()
+            session.refresh(job)
+            self._recalculate_counters(job_id)
+            return session.get(ConversationJob, job_id)
+
     def get_line_results(self, job_id: int) -> list[ConversationLineResult]:
         job = self.get(job_id)
         if job is None:

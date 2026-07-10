@@ -321,6 +321,32 @@ def test_running_detail_includes_typing_seconds():
 def test_wait_detail_describes_speaker_change():
     assert ConversationRunner._wait_detail(12, True) == "Cho delay (12s) — doi nguoi"
     assert ConversationRunner._wait_detail(8, False) == "Cho delay (8s) — cung nguoi"
+    assert "lich t+20s" in ConversationRunner._wait_detail(
+        8, False, schedule_at=20, typing_sec=5
+    )
+    assert "go 5s" in ConversationRunner._wait_detail(
+        8, False, schedule_at=20, typing_sec=5
+    )
+
+
+def test_fold_typing_into_remaining_does_not_stack():
+    # Gap 12s, want 5s typing → wait 7 + type 5 = 12 (no extra)
+    wait, typing = ConversationRunner.fold_typing_into_remaining(12.0, 5)
+    assert wait + typing == 12
+    assert typing == 5
+    assert wait == 7
+    # Tight gap: typing fills whole window
+    wait, typing = ConversationRunner.fold_typing_into_remaining(3.0, 7)
+    assert wait == 0
+    assert typing == 3
+    # Late: only brief typing flash
+    wait, typing = ConversationRunner.fold_typing_into_remaining(-1.0, 5)
+    assert wait == 0
+    assert typing == 2
+    # Typing disabled
+    wait, typing = ConversationRunner.fold_typing_into_remaining(10.0, 0)
+    assert wait == 10
+    assert typing == 0
 
 
 def test_success_detail_includes_typing_when_used():
@@ -343,6 +369,7 @@ def test_pick_typing_delay_disabled_when_max_zero():
         timing=ConversationTimingInput(typing_min_sec=2, typing_max_sec=0),
     )
     assert ConversationRunner._pick_typing_delay(script) == 0
+    assert ConversationRunner._pick_typing_delay(script, "ok") == 0
 
 
 def test_pick_typing_delay_swaps_inverted_range():
@@ -354,6 +381,20 @@ def test_pick_typing_delay_swaps_inverted_range():
     )
     delay = ConversationRunner._pick_typing_delay(script)
     assert 3 <= delay <= 8
+
+
+def test_pick_typing_delay_always_shows_when_enabled():
+    script = ConversationScriptInput(
+        group_link="https://t.me/g",
+        speakers=_two_speakers(),
+        lines=[_line(1, "a", "One")],
+        timing=ConversationTimingInput(typing_min_sec=2, typing_max_sec=7),
+    )
+    # Short acks used to return 0 — must still show "đang gõ"
+    for text in ("ok", "yep", "Yeah true", "BTC looks heavy near support"):
+        delay = ConversationRunner._pick_typing_delay(script, text)
+        assert delay >= 1, text
+        assert delay <= 7, text
 
 
 def test_resolve_final_status_marks_error_when_lines_failed():

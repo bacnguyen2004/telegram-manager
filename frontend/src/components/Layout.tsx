@@ -158,6 +158,23 @@ const navSections: { label: string; items: NavItem[] }[] = [
           </svg>
         ),
       },
+      {
+        to: '/campaign',
+        label: 'Chiến dịch',
+        end: false,
+        accent: 'violet',
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden>
+            <path
+              d="M4 6h10l2 3H20v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6Z"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <path d="M8 11v4M12 10v5M16 12v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        ),
+      },
     ],
   },
   {

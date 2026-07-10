@@ -10,6 +10,7 @@ export const PAGE_LABELS: Record<string, string> = {
   '/groups': 'Nhóm & kênh',
   '/tasks': 'Tác vụ hàng loạt',
   '/conversation': 'Hội thoại tự nhiên',
+  '/campaign': 'Chiến dịch',
   '/audit': 'Nhật ký hoạt động',
   '/security': 'Bảo mật',
 }
@@ -170,6 +171,24 @@ export const apiMap: ApiMapGroup[] = [
     items: [
       { method: 'POST', path: '/api/auto-profile/preview', page: '/auto-profile' },
       { method: 'POST', path: '/api/auto-profile/apply', page: '/auto-profile' },
+    ],
+  },
+  {
+    group: 'campaign',
+    label: 'Chiến dịch',
+    items: [
+      { method: 'GET', path: '/api/campaign/ai-status', page: '/campaign' },
+      { method: 'GET', path: '/api/campaign/market', page: '/campaign' },
+      { method: 'POST', path: '/api/campaign/plan', page: '/campaign' },
+      { method: 'POST', path: '/api/campaign/jobs', page: '/campaign' },
+      { method: 'GET', path: '/api/campaign/jobs/{job_id}', page: '/campaign' },
+      { method: 'POST', path: '/api/campaign/jobs/{job_id}/stop', page: '/campaign' },
+      { method: 'POST', path: '/api/campaign/jobs/{job_id}/resume', page: '/campaign' },
+      {
+        method: 'POST',
+        path: '/api/campaign/jobs/{job_id}/lines/{line_id}/retry',
+        page: '/campaign',
+      },
     ],
   },
 ]
