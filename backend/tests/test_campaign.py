@@ -1,7 +1,7 @@
 from app.schemas.campaign import CampaignPlan, CampaignPlanLine, CampaignSpeakerInput
 from app.services.campaign.normalize import (
     parse_plan_dict,
-    plan_to_conversation_script,
+    plan_to_script,
     validate_campaign_script,
 )
 from app.services.campaign.conversation_beats import (
@@ -399,7 +399,7 @@ def test_rescale_timeline_even_spacing():
     assert gap < 120
 
 
-def test_plan_to_conversation_script_and_validate():
+def test_plan_to_script_and_validate():
     speakers = [
         CampaignSpeakerInput(id="a", label="An", phone="+841"),
         CampaignSpeakerInput(id="b", label="Be", phone="+842"),
@@ -418,7 +418,7 @@ def test_plan_to_conversation_script_and_validate():
             ),
         ],
     )
-    script = plan_to_conversation_script(
+    script = plan_to_script(
         plan,
         speakers=speakers,
         group_link="https://t.me/example",
@@ -471,9 +471,9 @@ def test_resolve_openai_model():
 
 
 def test_start_campaign_job_without_ai(client, monkeypatch):
-    from app.services.conversation import conversation_runner, conversation_job_store
+    from app.services.campaign.execution import campaign_runner, campaign_job_store
 
-    monkeypatch.setattr(conversation_runner, "start", lambda job_id: True)
+    monkeypatch.setattr(campaign_runner, "start", lambda job_id: True)
 
     payload = {
         "plan": {
@@ -507,17 +507,17 @@ def test_start_campaign_job_without_ai(client, monkeypatch):
     assert body["success"] is True
     assert body["data"]["job_id"] > 0
     assert body["data"]["total_lines"] == 2
-    job = conversation_job_store.get(body["data"]["job_id"])
+    job = campaign_job_store.get(body["data"]["job_id"])
     assert job is not None
 
 
 def test_resume_campaign_job_after_stop(client, monkeypatch):
-    from app.services.conversation import conversation_runner, conversation_job_store
-    from app.schemas.conversation import ConversationLineResult
+    from app.services.campaign.execution import campaign_runner, campaign_job_store
+    from app.schemas.campaign import CampaignLineResult
 
-    monkeypatch.setattr(conversation_runner, "start", lambda job_id: True)
-    monkeypatch.setattr(conversation_runner, "resume", lambda job_id: True)
-    monkeypatch.setattr(conversation_runner, "is_active", lambda job_id: False)
+    monkeypatch.setattr(campaign_runner, "start", lambda job_id: True)
+    monkeypatch.setattr(campaign_runner, "resume", lambda job_id: True)
+    monkeypatch.setattr(campaign_runner, "is_active", lambda job_id: False)
 
     payload = {
         "plan": {
@@ -549,9 +549,9 @@ def test_resume_campaign_job_after_stop(client, monkeypatch):
     job_id = start.json()["data"]["job_id"]
 
     # Simulate: line 1 ok, line 2 pending, job stopped
-    conversation_job_store.update_line_result(
+    campaign_job_store.update_line_result(
         job_id,
-        ConversationLineResult(
+        CampaignLineResult(
             line_id=1,
             speaker_id="a",
             phone="+101",
@@ -563,8 +563,8 @@ def test_resume_campaign_job_after_stop(client, monkeypatch):
         success_lines=1,
         error_lines=0,
     )
-    conversation_job_store.mark_finished(job_id, "stopped")
-    job = conversation_job_store.get(job_id)
+    campaign_job_store.mark_finished(job_id, "stopped")
+    job = campaign_job_store.get(job_id)
     assert job is not None
     assert job.status == "stopped"
 
@@ -576,14 +576,14 @@ def test_resume_campaign_job_after_stop(client, monkeypatch):
 
 
 def test_retry_campaign_line(client, monkeypatch):
-    from app.services.conversation import conversation_runner, conversation_job_store
-    from app.schemas.conversation import ConversationLineResult
+    from app.services.campaign.execution import campaign_runner, campaign_job_store
+    from app.schemas.campaign import CampaignLineResult
 
-    monkeypatch.setattr(conversation_runner, "start", lambda job_id: True)
+    monkeypatch.setattr(campaign_runner, "start", lambda job_id: True)
     monkeypatch.setattr(
-        conversation_runner, "retry_line", lambda job_id, line_id: True
+        campaign_runner, "retry_line", lambda job_id, line_id: True
     )
-    monkeypatch.setattr(conversation_runner, "is_active", lambda job_id: False)
+    monkeypatch.setattr(campaign_runner, "is_active", lambda job_id: False)
 
     payload = {
         "plan": {
@@ -612,9 +612,9 @@ def test_retry_campaign_line(client, monkeypatch):
     }
     start = client.post("/api/campaign/jobs", json=payload)
     job_id = start.json()["data"]["job_id"]
-    conversation_job_store.update_line_result(
+    campaign_job_store.update_line_result(
         job_id,
-        ConversationLineResult(
+        CampaignLineResult(
             line_id=2,
             speaker_id="b",
             phone="+222",
@@ -625,7 +625,7 @@ def test_retry_campaign_line(client, monkeypatch):
         success_lines=0,
         error_lines=1,
     )
-    conversation_job_store.mark_finished(job_id, "error")
+    campaign_job_store.mark_finished(job_id, "error")
 
     res = client.post(f"/api/campaign/jobs/{job_id}/lines/2/retry")
     assert res.status_code == 200

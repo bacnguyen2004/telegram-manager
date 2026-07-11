@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 
 from sqlmodel import Session, col, func, select
 
-from ...db.engine import get_engine
-from ...db.models import ConversationJob
-from ...schemas.conversation import (
-    ConversationJobData,
-    ConversationJobSummary,
-    ConversationLineResult,
-    ConversationScriptInput,
+from ....db.engine import get_engine
+from ....db.models import CampaignJob
+from ....schemas.campaign import (
+    CampaignJobData,
+    CampaignJobSummary,
+    CampaignLineResult,
+    CampaignScript,
 )
 
 
@@ -25,16 +25,16 @@ def _iso(value: datetime | None) -> str:
     return value.isoformat()
 
 
-class ConversationJobStore:
+class CampaignJobStore:
     def create(
         self,
-        script: ConversationScriptInput,
+        script: CampaignScript,
         *,
         start_line_id: int | None = None,
-        carried_line_results: list[ConversationLineResult] | None = None,
-    ) -> ConversationJob:
+        carried_line_results: list[CampaignLineResult] | None = None,
+    ) -> CampaignJob:
         now = _utc_now()
-        carried_map: dict[int, ConversationLineResult] = {}
+        carried_map: dict[int, CampaignLineResult] = {}
         if carried_line_results:
             for item in carried_line_results:
                 if item.status == "success":
@@ -47,7 +47,7 @@ class ConversationJobStore:
                 carried = carried_map.get(line.id)
                 if carried:
                     line_results.append(
-                        ConversationLineResult(
+                        CampaignLineResult(
                             line_id=line.id,
                             speaker_id=line.speaker_id,
                             phone=phone or carried.phone,
@@ -59,7 +59,7 @@ class ConversationJobStore:
                     )
                     continue
                 line_results.append(
-                    ConversationLineResult(
+                    CampaignLineResult(
                         line_id=line.id,
                         speaker_id=line.speaker_id,
                         phone=phone,
@@ -70,7 +70,7 @@ class ConversationJobStore:
                 continue
 
             line_results.append(
-                ConversationLineResult(
+                CampaignLineResult(
                     line_id=line.id,
                     speaker_id=line.speaker_id,
                     phone=phone,
@@ -79,7 +79,7 @@ class ConversationJobStore:
                 ).model_dump()
             )
 
-        job = ConversationJob(
+        job = CampaignJob(
             status="pending",
             group_link=script.group_link.strip(),
             peer_id=(script.peer_id or script.group_link).strip(),
@@ -98,21 +98,21 @@ class ConversationJobStore:
             session.commit()
             session.refresh(job)
             self._recalculate_counters(job.id or 0)
-            refreshed = session.get(ConversationJob, job.id)
+            refreshed = session.get(CampaignJob, job.id)
             return refreshed or job
 
-    def get(self, job_id: int) -> ConversationJob | None:
+    def get(self, job_id: int) -> CampaignJob | None:
         with Session(get_engine()) as session:
-            return session.get(ConversationJob, job_id)
+            return session.get(CampaignJob, job_id)
 
-    def list_jobs(self, *, limit: int = 20, offset: int = 0) -> tuple[list[ConversationJob], int]:
+    def list_jobs(self, *, limit: int = 20, offset: int = 0) -> tuple[list[CampaignJob], int]:
         safe_limit = max(1, min(limit, 100))
         safe_offset = max(0, offset)
         with Session(get_engine()) as session:
-            total = session.exec(select(func.count()).select_from(ConversationJob)).one()
+            total = session.exec(select(func.count()).select_from(CampaignJob)).one()
             jobs = session.exec(
-                select(ConversationJob)
-                .order_by(col(ConversationJob.created_at).desc())
+                select(CampaignJob)
+                .order_by(col(CampaignJob.created_at).desc())
                 .offset(safe_offset)
                 .limit(safe_limit)
             ).all()
@@ -123,7 +123,7 @@ class ConversationJobStore:
         recovered = 0
         with Session(get_engine()) as session:
             jobs = session.exec(
-                select(ConversationJob).where(ConversationJob.status == "running")
+                select(CampaignJob).where(CampaignJob.status == "running")
             ).all()
             for job in jobs:
                 job.status = "stopped"
@@ -136,9 +136,9 @@ class ConversationJobStore:
                 session.commit()
         return recovered
 
-    def request_stop(self, job_id: int) -> ConversationJob | None:
+    def request_stop(self, job_id: int) -> CampaignJob | None:
         with Session(get_engine()) as session:
-            job = session.get(ConversationJob, job_id)
+            job = session.get(CampaignJob, job_id)
             if job is None:
                 return None
             job.stop_requested = True
@@ -150,9 +150,9 @@ class ConversationJobStore:
             session.refresh(job)
             return job
 
-    def prepare_resume(self, job_id: int) -> ConversationJob | None:
+    def prepare_resume(self, job_id: int) -> CampaignJob | None:
         with Session(get_engine()) as session:
-            job = session.get(ConversationJob, job_id)
+            job = session.get(CampaignJob, job_id)
             if job is None:
                 return None
             if job.status == "running":
@@ -166,9 +166,9 @@ class ConversationJobStore:
             session.refresh(job)
             return job
 
-    def reset_line_for_retry(self, job_id: int, line_id: int) -> ConversationJob | None:
+    def reset_line_for_retry(self, job_id: int, line_id: int) -> CampaignJob | None:
         with Session(get_engine()) as session:
-            job = session.get(ConversationJob, job_id)
+            job = session.get(CampaignJob, job_id)
             if job is None:
                 return None
             if job.status == "running":
@@ -178,7 +178,7 @@ class ConversationJobStore:
             found = False
             for index, item in enumerate(results):
                 if item.line_id == line_id:
-                    results[index] = ConversationLineResult(
+                    results[index] = CampaignLineResult(
                         line_id=item.line_id,
                         speaker_id=item.speaker_id,
                         phone=item.phone,
@@ -202,7 +202,7 @@ class ConversationJobStore:
             session.commit()
             session.refresh(job)
             self._recalculate_counters(job_id)
-            return session.get(ConversationJob, job_id)
+            return session.get(CampaignJob, job_id)
 
     def mark_running(self, job_id: int) -> None:
         self._update_job(job_id, status="running", stop_requested=False)
@@ -213,14 +213,14 @@ class ConversationJobStore:
     def update_line_result(
         self,
         job_id: int,
-        line_result: ConversationLineResult,
+        line_result: CampaignLineResult,
         *,
         completed_lines: int,
         success_lines: int,
         error_lines: int,
     ) -> None:
         with Session(get_engine()) as session:
-            job = session.get(ConversationJob, job_id)
+            job = session.get(CampaignJob, job_id)
             if job is None:
                 return
             results = self._load_line_results(job)
@@ -247,8 +247,8 @@ class ConversationJobStore:
         job = self.get(job_id)
         return bool(job and job.stop_requested)
 
-    def to_data(self, job: ConversationJob) -> ConversationJobData:
-        return ConversationJobData(
+    def to_data(self, job: CampaignJob) -> CampaignJobData:
+        return CampaignJobData(
             id=job.id or 0,
             status=job.status,  # type: ignore[arg-type]
             total_lines=job.total_lines,
@@ -264,8 +264,8 @@ class ConversationJobStore:
             error_message=job.error_message,
         )
 
-    def to_summary(self, job: ConversationJob) -> ConversationJobSummary:
-        return ConversationJobSummary(
+    def to_summary(self, job: CampaignJob) -> CampaignJobSummary:
+        return CampaignJobSummary(
             id=job.id or 0,
             status=job.status,
             total_lines=job.total_lines,
@@ -277,22 +277,22 @@ class ConversationJobStore:
             updated_at=_iso(job.updated_at),
         )
 
-    def load_script(self, job: ConversationJob) -> ConversationScriptInput:
-        return ConversationScriptInput.model_validate_json(job.script_json)
+    def load_script(self, job: CampaignJob) -> CampaignScript:
+        return CampaignScript.model_validate_json(job.script_json)
 
     def append_lines(
         self,
         job_id: int,
         lines: list,
-    ) -> ConversationJob | None:
-        """Append conversation lines + pending results. Only while job active."""
-        from ...schemas.conversation import ConversationLineInput
+    ) -> CampaignJob | None:
+        """Append script lines + pending results. Only while job active."""
+        from ....schemas.campaign import CampaignScriptLine
 
         if not lines:
             return self.get(job_id)
 
         with Session(get_engine()) as session:
-            job = session.get(ConversationJob, job_id)
+            job = session.get(CampaignJob, job_id)
             if job is None:
                 return None
             if job.status not in ("running", "pending"):
@@ -300,22 +300,22 @@ class ConversationJobStore:
             if job.stop_requested:
                 return None
 
-            script = ConversationScriptInput.model_validate_json(job.script_json)
+            script = CampaignScript.model_validate_json(job.script_json)
             results = self._load_line_results(job)
             existing_ids = {ln.id for ln in script.lines}
             added = 0
             for raw in lines:
-                if isinstance(raw, ConversationLineInput):
+                if isinstance(raw, CampaignScriptLine):
                     line = raw
                 else:
-                    line = ConversationLineInput.model_validate(raw)
+                    line = CampaignScriptLine.model_validate(raw)
                 if line.id in existing_ids:
                     continue
                 script.lines.append(line)
                 existing_ids.add(line.id)
                 phone = self._phone_for_speaker(script, line.speaker_id)
                 results.append(
-                    ConversationLineResult(
+                    CampaignLineResult(
                         line_id=line.id,
                         speaker_id=line.speaker_id,
                         phone=phone,
@@ -344,20 +344,20 @@ class ConversationJobStore:
             session.commit()
             session.refresh(job)
             self._recalculate_counters(job_id)
-            return session.get(ConversationJob, job_id)
+            return session.get(CampaignJob, job_id)
 
-    def get_line_results(self, job_id: int) -> list[ConversationLineResult]:
+    def get_line_results(self, job_id: int) -> list[CampaignLineResult]:
         job = self.get(job_id)
         if job is None:
             return []
         return self._load_line_results(job)
 
-    def _load_line_results(self, job: ConversationJob) -> list[ConversationLineResult]:
+    def _load_line_results(self, job: CampaignJob) -> list[CampaignLineResult]:
         raw = json.loads(job.line_results_json or "[]")
-        return [ConversationLineResult.model_validate(item) for item in raw]
+        return [CampaignLineResult.model_validate(item) for item in raw]
 
     @staticmethod
-    def _carried_detail(carried: ConversationLineResult) -> str:
+    def _carried_detail(carried: CampaignLineResult) -> str:
         parts = ["Giu tu job truoc"]
         if carried.message_id is not None:
             parts.append(f"TG #{carried.message_id}")
@@ -365,7 +365,7 @@ class ConversationJobStore:
             parts.append(carried.detail.strip())
         return " · ".join(parts)
 
-    def _phone_for_speaker(self, script: ConversationScriptInput, speaker_id: str) -> str:
+    def _phone_for_speaker(self, script: CampaignScript, speaker_id: str) -> str:
         for speaker in script.speakers:
             if speaker.id == speaker_id:
                 return speaker.phone.strip()
@@ -373,7 +373,7 @@ class ConversationJobStore:
 
     def _recalculate_counters(self, job_id: int) -> None:
         with Session(get_engine()) as session:
-            job = session.get(ConversationJob, job_id)
+            job = session.get(CampaignJob, job_id)
             if job is None:
                 return
             results = self._load_line_results(job)
@@ -403,7 +403,7 @@ class ConversationJobStore:
         stop_requested: bool | None = None,
     ) -> None:
         with Session(get_engine()) as session:
-            job = session.get(ConversationJob, job_id)
+            job = session.get(CampaignJob, job_id)
             if job is None:
                 return
             if status is not None:
@@ -417,4 +417,4 @@ class ConversationJobStore:
             session.commit()
 
 
-conversation_job_store = ConversationJobStore()
+campaign_job_store = CampaignJobStore()

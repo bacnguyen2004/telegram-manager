@@ -5,7 +5,6 @@
 import { authApi } from './auth'
 import { autoProfileApi } from './autoProfile'
 import { campaignApi } from './campaign'
-import { conversationApi } from './conversation'
 import { dialogsApi } from './dialogs'
 import { groupsApi } from './groups'
 import { healthApi } from './health'
@@ -25,7 +24,6 @@ export const api = {
   ...metadataApi,
   ...rosterApi,
   ...proxiesApi,
-  ...conversationApi,
   ...autoProfileApi,
   ...campaignApi,
 }
@@ -37,7 +35,6 @@ export {
   authApi,
   autoProfileApi,
   campaignApi,
-  conversationApi,
   dialogsApi,
   groupsApi,
   healthApi,

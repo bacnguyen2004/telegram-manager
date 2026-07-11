@@ -144,23 +144,7 @@ const navSections: { label: string; items: NavItem[] }[] = [
       },
       {
         to: '/conversation',
-        label: 'Hội thoại tự nhiên',
-        end: false,
-        accent: 'indigo',
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M8 10h8M8 14h5M6 4h12a2 2 0 0 1 2 2v11l-3-2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
-            />
-          </svg>
-        ),
-      },
-      {
-        to: '/campaign',
-        label: 'Chiến dịch',
+        label: 'Hội thoại',
         end: false,
         accent: 'violet',
         icon: (

@@ -1,7 +1,6 @@
 import re
 from urllib.parse import parse_qs, urlparse
 
-from telethon import TelegramClient
 from telethon.tl.types import MessageMediaWebPage
 
 _TME_POST_LINK_RE = re.compile(

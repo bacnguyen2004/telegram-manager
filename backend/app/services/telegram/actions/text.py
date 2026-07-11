@@ -1,3 +1,6 @@
+import asyncio
+from collections.abc import Callable
+
 from telethon.tl.functions.messages import SetTypingRequest
 from telethon.tl.types import SendMessageTypingAction
 
@@ -152,6 +155,7 @@ class TextActionService(MessageActionBase):
         )
 
     async def send_typing(self, phone: str, peer_id: str) -> dict:
+        """One-shot SetTyping (Telegram drops the indicator after ~5s)."""
         phone = normalize_phone(phone)
         peer_ref = str(peer_id or "").strip()
 
@@ -162,7 +166,72 @@ class TextActionService(MessageActionBase):
 
         async def operation(client):
             entity = await self._resolve_peer(client, peer_ref)
-            await client(SetTypingRequest(peer=entity, action=SendMessageTypingAction()))
+            # InputPeer required; resolve() also converts, but be explicit
+            input_peer = await client.get_input_entity(entity)
+            await client(
+                SetTypingRequest(peer=input_peer, action=SendMessageTypingAction())
+            )
+            return {
+                "status": "success",
+                "phone": phone,
+                "peer_id": peer_ref,
+                "message_id": None,
+                "reply_to_msg_id": None,
+                "message": "Da gui typing",
+            }
+
+        return await run_with_authorized_client(
+            phone,
+            api_id=self.api_id,
+            api_hash=self.api_hash,
+            session_dir=self.session_dir,
+            on_error=lambda msg: self._error(phone, peer_ref, msg),
+            operation=operation,
+        )
+
+    async def send_typing_for(
+        self,
+        phone: str,
+        peer_id: str,
+        seconds: float,
+        *,
+        should_stop: Callable[[], bool] | None = None,
+    ) -> dict:
+        """Hold connection and keep "đang nhập" visible for ``seconds``.
+
+        Uses Telethon ``client.action(..., 'typing')`` which re-sends
+        SetTyping ~every 3s while the context is open. Critical for campaign:
+        open→type→close thrashing can cancel the indicator before anyone sees it.
+        """
+        phone = normalize_phone(phone)
+        peer_ref = str(peer_id or "").strip()
+        duration = max(0.0, float(seconds or 0))
+
+        if not phone:
+            return self._error(phone, peer_ref, MISSING_PHONE_MESSAGE)
+        if not peer_ref:
+            return self._error(phone, peer_ref, MISSING_PEER_MESSAGE)
+        if duration <= 0:
+            return {
+                "status": "success",
+                "phone": phone,
+                "peer_id": peer_ref,
+                "message_id": None,
+                "reply_to_msg_id": None,
+                "message": "Bo qua typing",
+            }
+
+        async def operation(client):
+            entity = await self._resolve_peer(client, peer_ref)
+            # delay=3: Telegram expires typing after ~5s
+            async with client.action(entity, "typing", delay=3):
+                elapsed = 0.0
+                while elapsed < duration:
+                    if should_stop is not None and should_stop():
+                        break
+                    step = min(0.5, duration - elapsed)
+                    await asyncio.sleep(step)
+                    elapsed += step
             return {
                 "status": "success",
                 "phone": phone,

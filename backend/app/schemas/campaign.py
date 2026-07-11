@@ -1,8 +1,13 @@
+"""Campaign product schemas: AI plan, market, executable script, job results."""
+
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from .conversation import ConversationJobData, ConversationScriptInput, ConversationValidateData
+
+# ---------------------------------------------------------------------------
+# Plan speakers (cast for AI)
+# ---------------------------------------------------------------------------
 
 
 class CampaignSpeakerInput(BaseModel):
@@ -73,6 +78,11 @@ class CampaignPlan(BaseModel):
     title: str = Field(default="Campaign", max_length=120)
     duration_min: int = Field(default=20, ge=5, le=MAX_CAMPAIGN_DURATION_MIN)
     lines: list[CampaignPlanLine] = Field(..., min_length=1, max_length=MAX_CAMPAIGN_LINES)
+
+
+# ---------------------------------------------------------------------------
+# Market / news
+# ---------------------------------------------------------------------------
 
 
 class MarketCoinQuote(BaseModel):
@@ -146,10 +156,146 @@ class CampaignInjectData(BaseModel):
     status: str = ""
 
 
+# ---------------------------------------------------------------------------
+# Executable script (runtime contract: plan → runner)
+# ---------------------------------------------------------------------------
+
+
+class CampaignSpeakerRuntimeInput(BaseModel):
+    """Speaker binding on the executable script (id/label/phone)."""
+
+    id: str = Field(..., min_length=1, max_length=32, examples=["a"])
+    label: str = Field(..., min_length=1, max_length=80, examples=["An"])
+    phone: str = Field(..., examples=["+84901234567"])
+
+
+class CampaignTimingInput(BaseModel):
+    delay_min_sec: int = Field(default=4, ge=0, le=600)
+    delay_max_sec: int = Field(default=12, ge=0, le=600)
+    speaker_change_delay_min_sec: int = Field(default=8, ge=0, le=900)
+    speaker_change_delay_max_sec: int = Field(default=20, ge=0, le=900)
+    typing_min_sec: int = Field(default=2, ge=0, le=120)
+    typing_max_sec: int = Field(default=6, ge=0, le=120)
+
+
+class CampaignScriptLine(BaseModel):
+    id: int = Field(..., ge=1, description="Thu tu thuc thi 1..n")
+    script_ref: int = Field(
+        ...,
+        ge=1,
+        description="So dong goc trong kich ban GPT (#10, #12...)",
+    )
+    speaker_id: str = Field(..., min_length=1, max_length=32)
+    text: str = Field(..., min_length=1, max_length=4096)
+    reply_to: int | None = Field(
+        default=None,
+        ge=1,
+        description="Tham chieu id dong dich trong cung script",
+    )
+    at_sec: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Lich tuyet doi (giay tu luc start job). "
+            "Khi co at_sec, typing duoc cong don trong cua so cho den moc nay."
+        ),
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_script_ref(cls, data: object) -> object:
+        if isinstance(data, dict) and "script_ref" not in data and "id" in data:
+            data = {**data, "script_ref": data["id"]}
+        return data
+
+
+class CampaignScript(BaseModel):
+    version: int = Field(default=1, ge=1)
+    group_link: str = Field(default="", max_length=512)
+    peer_id: str | None = Field(
+        default=None,
+        description="Mac dinh dung group_link neu bo trong",
+    )
+    speakers: list[CampaignSpeakerRuntimeInput] = Field(
+        ..., min_length=1, max_length=10
+    )
+    lines: list[CampaignScriptLine] = Field(default_factory=list, max_length=500)
+    timing: CampaignTimingInput = Field(default_factory=CampaignTimingInput)
+    reply_on_speaker_change: bool = Field(
+        default=True,
+        description="Khi doi vai, reply tin cuoi cua vai truoc (neu khong co reply_to)",
+    )
+    continue_on_error: bool = Field(
+        default=False,
+        description="Loi mot cau thi dung job (mac dinh)",
+    )
+    schedule_mode: bool = Field(
+        default=False,
+        description=(
+            "True (campaign): dung at_sec tuyet doi, typing nam trong gap kich ban. "
+            "False: delay ngau nhien + typing cong them (legacy)."
+        ),
+    )
+
+
+class CampaignValidationIssue(BaseModel):
+    level: Literal["error", "warning"]
+    code: str
+    message: str
+    line_id: int | None = None
+
+
+class CampaignValidationData(BaseModel):
+    valid: bool
+    line_count: int
+    issues: list[CampaignValidationIssue]
+    script: CampaignScript | None = None
+
+
+class CampaignLineResult(BaseModel):
+    line_id: int
+    speaker_id: str
+    phone: str
+    status: Literal["pending", "running", "success", "error", "skipped"]
+    message_id: int | None = None
+    reply_to_msg_id: int | None = None
+    detail: str = ""
+
+
+class CampaignJobData(BaseModel):
+    """Job monitor payload for running campaign execution."""
+
+    id: int
+    status: Literal["pending", "running", "done", "stopped", "error"]
+    total_lines: int
+    completed_lines: int
+    success_lines: int
+    error_lines: int
+    group_link: str
+    stop_requested: bool
+    line_results: list[CampaignLineResult]
+    script: CampaignScript | None = None
+    created_at: str
+    updated_at: str
+    error_message: str | None = None
+
+
+class CampaignJobSummary(BaseModel):
+    id: int
+    status: str
+    total_lines: int
+    completed_lines: int
+    success_lines: int
+    error_lines: int
+    group_link: str
+    created_at: str
+    updated_at: str
+
+
 class CampaignPlanData(BaseModel):
     plan: CampaignPlan
-    script: ConversationScriptInput
-    validation: ConversationValidateData
+    script: CampaignScript
+    validation: CampaignValidationData
     market: CampaignMarketContext | None = None
 
 
@@ -194,12 +340,10 @@ class CampaignAiStatusData(BaseModel):
     model: str
     models: list[str] = Field(default_factory=list)
     model_catalog: list[CampaignModelPriceRow] = Field(default_factory=list)
-    plan_cost_estimates_150: list[CampaignPlanCostEstimate] = Field(default_factory=list)
+    plan_cost_estimates_150: list[CampaignPlanCostEstimate] = Field(
+        default_factory=list
+    )
     pricing_unit: str = "USD per 1M tokens (standard short context)"
     pricing_source: str = "https://developers.openai.com/api/docs/pricing"
     models_source: str = "env_or_catalog"
     message: str
-
-
-class CampaignJobData(ConversationJobData):
-    """Reuse conversation job payload shape for monitor UI."""

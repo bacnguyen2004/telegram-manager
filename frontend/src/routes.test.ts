@@ -11,6 +11,7 @@ const routes: RouteObject[] = [
       { path: 'sessions', element: null },
       { path: 'roster', element: null },
       { path: 'auto-profile', element: null },
+      { path: 'conversation', element: null },
       { path: 'campaign', element: null },
       { path: 'groups', element: null },
     ],
@@ -31,7 +32,13 @@ describe('app routes', () => {
     expect(matches?.some((m) => m.route.path === 'auto-profile')).toBe(true)
   })
 
-  it('matches /campaign under layout', () => {
+  it('matches /conversation under layout (campaign UI)', () => {
+    const matches = matchRoutes(routes, '/conversation')
+    expect(matches).not.toBeNull()
+    expect(matches?.some((m) => m.route.path === 'conversation')).toBe(true)
+  })
+
+  it('still has /campaign route (redirect target in app router)', () => {
     const matches = matchRoutes(routes, '/campaign')
     expect(matches).not.toBeNull()
     expect(matches?.some((m) => m.route.path === 'campaign')).toBe(true)

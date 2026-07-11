@@ -1,19 +1,21 @@
-"""Convert AI campaign plan → ConversationScriptInput for existing runner."""
+"""Convert AI campaign plan → CampaignScript for existing runner."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from ...schemas.conversation import (
-    ConversationLineInput,
-    ConversationScriptInput,
-    ConversationSpeakerInput,
-    ConversationTimingInput,
-    ConversationValidateData,
-    ConversationValidationIssue,
+from ...schemas.campaign import (
+    CampaignPlan,
+    CampaignPlanLine,
+    CampaignScript,
+    CampaignScriptLine,
+    CampaignSpeakerInput,
+    CampaignSpeakerRuntimeInput,
+    CampaignTimingInput,
+    CampaignValidationData,
+    CampaignValidationIssue,
 )
-from ...schemas.campaign import CampaignPlan, CampaignPlanLine, CampaignSpeakerInput
-from ..conversation.validator import validate_conversation_script
+from .execution.validator import validate_campaign_script_structure
 
 
 def _clamp_duration(minutes: int) -> int:
@@ -114,15 +116,15 @@ def parse_plan_dict(raw: dict[str, Any]) -> CampaignPlan:
     return CampaignPlan(title=title, duration_min=duration, lines=ordered)
 
 
-def plan_to_conversation_script(
+def plan_to_script(
     plan: CampaignPlan,
     *,
     speakers: list[CampaignSpeakerInput],
     group_link: str,
     peer_id: str | None = None,
-) -> ConversationScriptInput:
+) -> CampaignScript:
     speaker_models = [
-        ConversationSpeakerInput(
+        CampaignSpeakerRuntimeInput(
             id=item.id.strip(),
             label=(item.label or item.id).strip()[:80] or item.id,
             phone=item.phone.strip(),
@@ -131,7 +133,7 @@ def plan_to_conversation_script(
     ]
     speaker_ids = {s.id for s in speaker_models}
 
-    conv_lines: list[ConversationLineInput] = []
+    conv_lines: list[CampaignScriptLine] = []
     for index, line in enumerate(plan.lines, start=1):
         sid = line.speaker_id
         if sid not in speaker_ids:
@@ -147,7 +149,7 @@ def plan_to_conversation_script(
                 reply_to = target
 
         conv_lines.append(
-            ConversationLineInput(
+            CampaignScriptLine(
                 id=index,
                 script_ref=index,
                 speaker_id=sid,
@@ -184,7 +186,7 @@ def plan_to_conversation_script(
     else:
         change_min, change_max = 8, 18
 
-    timing = ConversationTimingInput(
+    timing = CampaignTimingInput(
         delay_min_sec=min(delay_min, 600),
         delay_max_sec=min(delay_max, 600),
         speaker_change_delay_min_sec=min(change_min, 900),
@@ -194,7 +196,7 @@ def plan_to_conversation_script(
         typing_max_sec=7,
     )
 
-    return ConversationScriptInput(
+    return CampaignScript(
         version=1,
         group_link=group_link.strip(),
         peer_id=(peer_id or group_link).strip() or None,
@@ -210,12 +212,12 @@ def plan_to_conversation_script(
     )
 
 
-def validate_campaign_script(script: ConversationScriptInput) -> ConversationValidateData:
-    data = validate_conversation_script(script)
+def validate_campaign_script(script: CampaignScript) -> CampaignValidationData:
+    data = validate_campaign_script_structure(script)
     # Campaign requires group before start
     if not script.group_link.strip():
         data.issues = [
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="error",
                 code="missing_group",
                 message="Thieu link nhom / peer de chay chien dich",

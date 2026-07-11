@@ -49,13 +49,6 @@ export interface RegisterData {
   session_file: string
 }
 
-export interface LoginCodeData {
-  status: 'success' | 'error'
-  phone: string
-  code: string
-  message: string
-}
-
 export interface Update2faData {
   status: 'success' | 'error'
   message: string
@@ -801,6 +794,33 @@ export interface CampaignJobCreateData {
   status: string
   total_lines: number
   title: string
+}
+
+/** Shared job shape returned by campaign (and legacy conversation) runners */
+export interface ConversationLineResult {
+  line_id: number
+  speaker_id: string
+  phone: string
+  status: 'pending' | 'running' | 'success' | 'error' | 'skipped'
+  message_id?: number | null
+  reply_to_msg_id?: number | null
+  detail?: string
+}
+
+export interface ConversationJobData {
+  id: number
+  status: 'pending' | 'running' | 'done' | 'stopped' | 'error'
+  total_lines: number
+  completed_lines: number
+  success_lines: number
+  error_lines: number
+  group_link: string
+  stop_requested: boolean
+  line_results: ConversationLineResult[]
+  script?: Record<string, unknown> | null
+  created_at: string
+  updated_at: string
+  error_message?: string | null
 }
 
 export interface CampaignModelPriceRow {

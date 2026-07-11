@@ -1,5 +1,4 @@
 import type {
-  LoginCodeData,
   LoginData,
   PrivacyRuleType,
   RegisterData,
@@ -34,10 +33,6 @@ export const authApi = {
         last_name: lastName || '',
       }),
     })
-  },
-
-  getLoginCode(phone: string) {
-    return request<LoginCodeData>(`/auth/login-code/${encodeURIComponent(phone)}`)
   },
 
   update2fa(

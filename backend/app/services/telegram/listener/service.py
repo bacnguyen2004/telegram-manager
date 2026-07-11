@@ -19,6 +19,7 @@ class TelegramListenerService:
         self._handlers: dict[str, HandlerList] = {}
         self._stop_tasks: dict[str, asyncio.Task[None]] = {}
         self._watch_tasks: dict[str, asyncio.Task[None]] = {}
+        self._start_tasks: dict[str, asyncio.Task[bool]] = {}
         self._lock = asyncio.Lock()
 
     @property
@@ -52,6 +53,22 @@ class TelegramListenerService:
             if phone in self._active_phones:
                 return True
 
+            existing = self._start_tasks.get(phone)
+            if existing is not None and not existing.done():
+                start_task = existing
+            else:
+                start_task = asyncio.create_task(self._start_listener_safe(phone))
+                self._start_tasks[phone] = start_task
+
+        try:
+            return await start_task
+        finally:
+            async with self._lock:
+                current = self._start_tasks.get(phone)
+                if current is start_task:
+                    self._start_tasks.pop(phone, None)
+
+    async def _start_listener_safe(self, phone: str) -> bool:
         try:
             await self._start_listener(phone)
             return True
@@ -123,14 +140,14 @@ class TelegramListenerService:
             return
 
     async def _restart_listener(self, phone: str) -> None:
-        await self._teardown_handlers(phone, release_client=False)
+        # Release the previous acquire so listener_refs does not climb forever.
+        await self._teardown_handlers(phone, release_client=True)
         try:
             await self._start_listener(phone)
         except Exception:
             logger.exception("Reconnect listener that bai cho %s", phone)
             async with self._lock:
                 self._active_phones.discard(phone)
-            await telethon_client_pool.release_listener(phone)
 
     async def schedule_stop(self, phone: str) -> None:
         if not self.enabled:
@@ -160,6 +177,9 @@ class TelegramListenerService:
             watch_task = self._watch_tasks.pop(phone, None)
             if watch_task and not watch_task.done():
                 watch_task.cancel()
+            start_task = self._start_tasks.pop(phone, None)
+            if start_task and not start_task.done():
+                start_task.cancel()
 
         await self._teardown_handlers(phone, release_client=True)
 
@@ -193,8 +213,12 @@ class TelegramListenerService:
             for task in self._watch_tasks.values():
                 if not task.done():
                     task.cancel()
+            for task in self._start_tasks.values():
+                if not task.done():
+                    task.cancel()
             self._stop_tasks.clear()
             self._watch_tasks.clear()
+            self._start_tasks.clear()
 
         for phone in phones:
             await self.stop_listening(phone)

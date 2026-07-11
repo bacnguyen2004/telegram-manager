@@ -1,6 +1,7 @@
 import asyncio
 import os
 import re
+import sys
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -9,6 +10,35 @@ from pathlib import Path
 
 class SessionLockTimeoutError(TimeoutError):
     pass
+
+
+def _pid_alive(pid: int) -> bool:
+    """Return True if process ``pid`` appears to be running."""
+    if pid <= 0:
+        return False
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+            # PROCESS_QUERY_LIMITED_INFORMATION
+            handle = kernel32.OpenProcess(0x1000, False, pid)
+            if handle:
+                kernel32.CloseHandle(handle)
+                return True
+            return False
+        except Exception:
+            return False
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Exists but we cannot signal it
+        return True
+    except OSError:
+        return False
 
 
 class SessionLock:
@@ -39,10 +69,26 @@ class SessionLock:
     def _lock_path(self, phone: str) -> Path:
         return self.lock_dir / f"{self._safe_phone_key(phone)}.lock"
 
+    def _read_lock_pid(self, path: Path) -> int | None:
+        try:
+            first = path.read_text(encoding="utf-8").splitlines()[0].strip()
+            return int(first)
+        except (OSError, IndexError, ValueError):
+            return None
+
     def _cleanup_stale(self, path: Path) -> None:
+        """Remove lock only when owner PID is dead (or lock unreadable + old)."""
         if not path.exists():
             return
         try:
+            pid = self._read_lock_pid(path)
+            if pid is not None:
+                if _pid_alive(pid):
+                    return
+                path.unlink(missing_ok=True)
+                return
+
+            # Unreadable / missing PID: fall back to mtime only
             if time.time() - path.stat().st_mtime > self.stale_seconds:
                 path.unlink(missing_ok=True)
         except OSError:

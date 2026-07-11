@@ -17,7 +17,7 @@ import type {
   CampaignPlanLine,
   CampaignSpeaker,
 } from '../types/api'
-import type { ConversationJobData } from '../utils/conversationScript'
+import type { ConversationJobData } from '../types/api'
 import {
   clampDurationMin,
   clampTargetLines,
@@ -1090,8 +1090,8 @@ export function CampaignPage() {
               </svg>
             </div>
             <div className="cg-head-copy">
-              <span className="cg-kicker">Multi-acc · AI campaign</span>
-              <h1>Chiến dịch group</h1>
+              <span className="cg-kicker">Hội thoại · Multi-acc · AI</span>
+              <h1>Hội thoại group</h1>
               <p>Chọn dàn acc → goal & tin → AI dựng timeline → chạy multi-acc trong group</p>
             </div>
           </div>

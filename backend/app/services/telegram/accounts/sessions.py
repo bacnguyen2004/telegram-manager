@@ -89,8 +89,9 @@ class SessionService:
             )
 
         try:
+            deleted_files: list[str] = []
+            pending_auth_cleared = False
             async with session_lock.acquire(phone):
-                deleted_files: list[str] = []
                 if session_file.exists():
                     session_file.unlink()
                     deleted_files.append(str(session_file))
@@ -112,13 +113,28 @@ class SessionService:
                 metadata_store.remove_session_meta(phone)
                 self._remove_avatar_file(phone)
 
-                return self._delete_result(
-                    "success",
-                    phone,
-                    deleted_files=deleted_files,
-                    pending_auth_cleared=pending_auth_cleared,
-                    message="Da xoa session",
-                )
+            # Outside file lock: tear down live pool/listener so a warm client
+            # does not keep using a deleted .session.
+            try:
+                from ..listener import telegram_listener
+
+                await telegram_listener.stop_listening(phone)
+            except Exception:
+                pass
+            try:
+                from ..client.pool import telethon_client_pool
+
+                await telethon_client_pool.drop_client(phone)
+            except Exception:
+                pass
+
+            return self._delete_result(
+                "success",
+                phone,
+                deleted_files=deleted_files,
+                pending_auth_cleared=pending_auth_cleared,
+                message="Da xoa session",
+            )
         except Exception as exc:
             return self._delete_result("error", phone, message=str(exc))
 

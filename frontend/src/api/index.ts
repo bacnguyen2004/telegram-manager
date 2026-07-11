@@ -3,7 +3,6 @@ export {
   authApi,
   autoProfileApi,
   campaignApi,
-  conversationApi,
   dialogsApi,
   groupsApi,
   healthApi,

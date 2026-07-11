@@ -202,3 +202,80 @@ async def test_ws_manager_event_mode_uses_listener_without_poll(monkeypatch):
 
     ensure_mock.assert_awaited_once_with("+84901234567")
     assert room.poll_task is None
+
+
+async def test_restart_listener_releases_before_reacquire(monkeypatch):
+    monkeypatch.setattr(settings, "telegram_realtime_mode", "event")
+    monkeypatch.setattr(settings, "telegram_listener_enabled", True)
+
+    service = TelegramListenerService()
+    phone = "+84901234567"
+    acquires = {"n": 0}
+    releases = {"n": 0}
+
+    fake_client = MagicMock()
+    fake_client.is_connected = MagicMock(return_value=True)
+    fake_client.add_event_handler = MagicMock()
+    fake_client.remove_event_handler = MagicMock()
+
+    async def acquire(p):
+        acquires["n"] += 1
+        return fake_client
+
+    async def release(p):
+        releases["n"] += 1
+
+    monkeypatch.setattr(
+        listener_module.telethon_client_pool,
+        "acquire_listener",
+        acquire,
+    )
+    monkeypatch.setattr(
+        listener_module.telethon_client_pool,
+        "release_listener",
+        release,
+    )
+    monkeypatch.setattr(
+        listener_module.telethon_client_pool,
+        "get_client_if_connected",
+        AsyncMock(return_value=fake_client),
+    )
+
+    await service._start_listener(phone)
+    assert acquires["n"] == 1
+    assert releases["n"] == 0
+
+    await service._restart_listener(phone)
+    assert acquires["n"] == 2
+    assert releases["n"] == 1
+    assert phone in service._active_phones
+
+    await service.stop_listening(phone)
+    assert releases["n"] == 2
+
+
+async def test_ensure_listening_single_flight(monkeypatch):
+    monkeypatch.setattr(settings, "telegram_realtime_mode", "event")
+    monkeypatch.setattr(settings, "telegram_listener_enabled", True)
+
+    service = TelegramListenerService()
+    phone = "+84901234567"
+    starts = {"n": 0}
+    gate = asyncio.Event()
+
+    async def slow_start(p):
+        starts["n"] += 1
+        await gate.wait()
+        service._active_phones.add(p)
+        service._handlers[p] = []
+
+    monkeypatch.setattr(service, "_start_listener", slow_start)
+
+    t1 = asyncio.create_task(service.ensure_listening(phone))
+    t2 = asyncio.create_task(service.ensure_listening(phone))
+    await asyncio.sleep(0.05)
+    assert starts["n"] == 1
+    gate.set()
+    results = await asyncio.gather(t1, t2)
+    assert results == [True, True]
+    assert starts["n"] == 1

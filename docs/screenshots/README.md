@@ -20,7 +20,7 @@
 | `dialogs.png` | `/dialogs` | Tin nhắn | Chat + thread |
 | `groups.png` | `/groups` | Nhóm & kênh | Picker + danh sách nhóm |
 | `tasks.png` | `/tasks` | Tác vụ hàng loạt | Composer + progress |
-| `conversation.png` | `/conversation` | Hội thoại tự nhiên | Script preview / job |
+| `conversation.png` | `/conversation` | Hội thoại | Campaign AI plan / job monitor |
 | `security.png` | `/security` | Bảo mật | 2FA hoặc privacy bulk |
 | `audit.png` | `/audit` | Nhật ký hoạt động | Bảng audit có dòng |
 | `health.png` | `/health` | Trạng thái API | Backend OK |

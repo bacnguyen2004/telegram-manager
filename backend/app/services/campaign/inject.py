@@ -7,10 +7,13 @@ import re
 import unicodedata
 from typing import Any
 
-from ...schemas.campaign import CampaignInjectRequest, CampaignPlanLine
-from ...schemas.conversation import ConversationLineInput
+from ...schemas.campaign import (
+    CampaignInjectRequest,
+    CampaignPlanLine,
+    CampaignScriptLine,
+)
 from ..ai.llm import generate_chat_text, is_ai_configured
-from ..conversation.store import conversation_job_store
+from .execution.store import campaign_job_store
 from .normalize import parse_plan_dict
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
@@ -92,13 +95,13 @@ async def inject_into_job(job_id: int, payload: CampaignInjectRequest) -> dict[s
             "AI chua cau hinh - dat AI_ENABLED=true va OPENAI_API_KEY trong backend/.env"
         )
 
-    job = conversation_job_store.get(job_id)
+    job = campaign_job_store.get(job_id)
     if job is None:
         raise LookupError("Khong tim thay job")
     if job.status not in ("running", "pending"):
         raise ValueError(f"Job khong dang chay (status={job.status})")
 
-    script = conversation_job_store.load_script(job)
+    script = campaign_job_store.load_script(job)
     if not script.speakers:
         raise ValueError("Job khong co speakers")
 
@@ -119,7 +122,7 @@ async def inject_into_job(job_id: int, payload: CampaignInjectRequest) -> dict[s
         except Exception as exc:
             market_brief = f"Prices unavailable: {exc}"
 
-    results = conversation_job_store.get_line_results(job_id)
+    results = campaign_job_store.get_line_results(job_id)
     success_ids = {r.line_id for r in results if r.status == "success"}
     recent_texts: list[dict[str, str]] = []
     for line in sorted(script.lines, key=lambda x: x.id):
@@ -191,7 +194,7 @@ async def inject_into_job(job_id: int, payload: CampaignInjectRequest) -> dict[s
             last_at = max(last_at, int(ln.at_sec))
     burst_base = last_at + 5
     valid_speakers = {s.id for s in script.speakers}
-    new_conv_lines: list[ConversationLineInput] = []
+    new_conv_lines: list[CampaignScriptLine] = []
     plan_out: list[CampaignPlanLine] = []
 
     for i, pl in enumerate(plan_lines):
@@ -213,7 +216,7 @@ async def inject_into_job(job_id: int, payload: CampaignInjectRequest) -> dict[s
             prev_abs = new_conv_lines[-1].at_sec or burst_base
             abs_at = max(abs_at, int(prev_abs) + 2)
         new_conv_lines.append(
-            ConversationLineInput(
+            CampaignScriptLine(
                 id=new_id,
                 script_ref=new_id,
                 speaker_id=sid,
@@ -232,7 +235,7 @@ async def inject_into_job(job_id: int, payload: CampaignInjectRequest) -> dict[s
             )
         )
 
-    updated = conversation_job_store.append_lines(job_id, new_conv_lines)
+    updated = campaign_job_store.append_lines(job_id, new_conv_lines)
     if updated is None:
         raise ValueError("Khong append duoc line (job co the da ket thuc)")
 

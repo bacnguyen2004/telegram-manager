@@ -1,4 +1,4 @@
-from telethon.tl.types import MessageMediaPoll, MessageMediaToDo, MessageMediaWebPage
+from telethon.tl.types import MessageMediaPoll, MessageMediaToDo
 
 
 class PollExtractMixin:

@@ -109,25 +109,8 @@ const quickLinks = [
   {
     key: 'conversation',
     to: '/conversation',
-    label: 'Hội thoại tự nhiên',
-    desc: 'Kịch bản nhiều vai, delay & typing',
-    accent: 'indigo',
-    icon: (
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
-        <path
-          d="M8 10h8M8 14h5M6 4h12a2 2 0 0 1 2 2v11l-3-2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"
-          stroke="currentColor"
-          strokeWidth="1.8"
-          strokeLinejoin="round"
-        />
-      </svg>
-    ),
-  },
-  {
-    key: 'campaign',
-    to: '/campaign',
-    label: 'Chiến dịch',
-    desc: 'Goal + AI lập lịch multi-acc trong group',
+    label: 'Hội thoại',
+    desc: 'Chiến dịch AI · multi-acc · delay & typing trong group',
     accent: 'violet',
     icon: (
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>
@@ -294,7 +277,7 @@ export function DashboardPage() {
           </div>
           <h1 className="dash-hero-title">Tổng quan</h1>
           <p className="dash-hero-desc">
-            Quản lý tài khoản Telegram, tin nhắn, nhóm, tác vụ hàng loạt và hội thoại tự nhiên —
+            Quản lý tài khoản Telegram, tin nhắn, nhóm, tác vụ hàng loạt và hội thoại (chiến dịch AI) —
             {API_ENDPOINT_COUNT} REST endpoint qua một dashboard.
           </p>
           <div className="dash-hero-actions">
@@ -305,7 +288,7 @@ export function DashboardPage() {
               Tin nhắn
             </Link>
             <Link to="/conversation" className="btn btn--ghost">
-              Hội thoại tự nhiên
+              Hội thoại
             </Link>
             <a
               href="http://127.0.0.1:8001/docs"

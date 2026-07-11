@@ -1,9 +1,9 @@
-from ...db import metadata_store
-from ...schemas.conversation import ConversationScriptInput
-from .store import conversation_job_store
+from ....db import metadata_store
+from ....schemas.campaign import CampaignScript
+from .store import campaign_job_store
 
 
-def _primary_phone(script: ConversationScriptInput) -> str:
+def _primary_phone(script: CampaignScript) -> str:
     for speaker in script.speakers:
         phone = speaker.phone.strip()
         if phone:
@@ -11,7 +11,7 @@ def _primary_phone(script: ConversationScriptInput) -> str:
     return ""
 
 
-def _timing_detail(script: ConversationScriptInput) -> dict[str, int]:
+def _timing_detail(script: CampaignScript) -> dict[str, int]:
     timing = script.timing
     return {
         "delay_min_sec": timing.delay_min_sec,
@@ -31,9 +31,9 @@ def _map_finish_status(status: str) -> str:
     return "info"
 
 
-def record_conversation_start(
+def record_job_start(
     job_id: int,
-    script: ConversationScriptInput,
+    script: CampaignScript,
     *,
     only_line_id: int | None = None,
 ) -> None:
@@ -60,18 +60,18 @@ def record_conversation_start(
     )
 
 
-def record_conversation_finish(
+def record_job_finish(
     job_id: int,
     status: str,
     *,
     error_message: str | None = None,
     only_line_id: int | None = None,
 ) -> None:
-    job = conversation_job_store.get(job_id)
+    job = campaign_job_store.get(job_id)
     if job is None:
         return
 
-    script = conversation_job_store.load_script(job)
+    script = campaign_job_store.load_script(job)
     phone = _primary_phone(script)
     if not phone:
         return

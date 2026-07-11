@@ -89,10 +89,10 @@ class AuditLog(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utc_now, index=True)
 
 
-class ConversationJob(SQLModel, table=True):
-    """Background conversation script execution."""
+class CampaignJob(SQLModel, table=True):
+    """Campaign multi-acc job execution row (Hội thoại runtime)."""
 
-    __tablename__ = "conversation_jobs"
+    __tablename__ = "campaign_jobs"
 
     id: int | None = Field(default=None, primary_key=True)
     status: str = Field(default="pending", max_length=16, index=True)

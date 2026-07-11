@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 
 from ..schemas.auth import (
-    LoginCodeData,
     LoginData,
     LoginRequest,
     RegisterData,
@@ -46,13 +45,6 @@ async def register(payload: RegisterRequest) -> dict:
         payload.last_name,
     )
     data = RegisterData(**result)
-    return success_response(data.model_dump())
-
-
-@router.get("/login-code/{phone}", response_model=ApiEnvelope[LoginCodeData])
-async def get_login_code(phone: str) -> dict:
-    result = await telegram_auth_service.get_login_code(phone)
-    data = LoginCodeData(**result)
     return success_response(data.model_dump())
 
 

@@ -3,7 +3,6 @@ import re
 from pathlib import Path
 
 from telethon.errors import (
-    ChannelPrivateError,
     PhoneCodeExpiredError,
     PhoneCodeInvalidError,
     PhoneNumberBannedError,
@@ -11,18 +10,12 @@ from telethon.errors import (
     PhoneNumberUnoccupiedError,
     SessionPasswordNeededError,
 )
+from telethon.tl import types
 from telethon.tl.functions.auth import SignUpRequest
-from telethon.tl.functions.messages import GetHistoryRequest
-from telethon.tl.types import (
-    InputPrivacyKeyChatInvite,
-    InputPrivacyValueAllowAll,
-    InputPrivacyValueAllowContacts,
-    InputPrivacyValueDisallowAll,
-)
 
 from ....config import BASE_DIR, settings
 from ....db import metadata_store
-from ..client import telethon_session
+from ..client import pending_auth_session
 
 
 class TelegramAuthService:
@@ -45,7 +38,7 @@ class TelegramAuthService:
             return self._result("error", str(exc), phone)
 
         try:
-            async with telethon_session(
+            async with pending_auth_session(
                 phone, self.api_id, self.api_hash, self.session_dir
             ) as client:
                 if await client.is_user_authorized():
@@ -93,7 +86,7 @@ class TelegramAuthService:
         phone_code_hash = self._load_phone_code_hash(phone)
 
         try:
-            async with telethon_session(
+            async with pending_auth_session(
                 phone, self.api_id, self.api_hash, self.session_dir
             ) as client:
                 if await client.is_user_authorized():
@@ -192,7 +185,7 @@ class TelegramAuthService:
             )
 
         try:
-            async with telethon_session(
+            async with pending_auth_session(
                 phone, self.api_id, self.api_hash, self.session_dir
             ) as client:
                 if await client.is_user_authorized():
@@ -235,78 +228,6 @@ class TelegramAuthService:
             return self._result("error", "So dien thoai da bi cam", phone)
         except Exception as exc:
             return self._result("error", str(exc), phone)
-
-    async def get_login_code(self, phone: str) -> dict:
-        phone = phone.strip()
-        if not phone:
-            return {"status": "error", "phone": phone, "code": "", "message": "Thieu phone"}
-
-        try:
-            settings.validate_telegram_config()
-        except ValueError as exc:
-            return {"status": "error", "phone": phone, "code": "", "message": str(exc)}
-
-        session_base = self.session_dir / phone
-        session_file = session_base.with_suffix(".session")
-        if not session_file.exists():
-            return {
-                "status": "error",
-                "phone": phone,
-                "code": "",
-                "message": f"Khong tim thay file session: {session_file}",
-            }
-
-        try:
-            async with telethon_session(
-                phone, self.api_id, self.api_hash, self.session_dir
-            ) as client:
-                if not await client.is_user_authorized():
-                    return {
-                        "status": "error",
-                        "phone": phone,
-                        "code": "",
-                        "message": "Session chua dang nhap hoac da het han",
-                    }
-
-                bot = await client.get_entity(777000)
-                history = await client(
-                    GetHistoryRequest(
-                        peer=bot,
-                        limit=1,
-                        offset_date=None,
-                        offset_id=0,
-                        max_id=0,
-                        min_id=0,
-                        add_offset=0,
-                        hash=0,
-                    )
-                )
-                if history.messages:
-                    code_message = history.messages[0].message
-                    code_digits = "".join(char for char in code_message if char.isdigit())
-                    if code_digits:
-                        return {
-                            "status": "success",
-                            "phone": phone,
-                            "code": code_digits,
-                            "message": "OK",
-                        }
-
-                return {
-                    "status": "error",
-                    "phone": phone,
-                    "code": "",
-                    "message": "Khong tim thay ma xac thuc trong tin nhan Telegram",
-                }
-        except ChannelPrivateError:
-            return {
-                "status": "error",
-                "phone": phone,
-                "code": "",
-                "message": "Khong co quyen truy cap",
-            }
-        except Exception as exc:
-            return {"status": "error", "phone": phone, "code": "", "message": str(exc)}
 
     def _pending_auth_path(self, phone: str) -> Path:
         safe_phone = re.sub(r"[^0-9A-Za-z_+-]+", "_", phone)

@@ -1,5 +1,8 @@
 from app.db.proxy_store import proxy_store
-from app.services.telegram.proxy.resolve import telethon_proxy_dict
+from app.services.telegram.proxy.resolve import (
+    telethon_client_kwargs_from_row,
+    telethon_proxy_dict,
+)
 from app.db.models import Proxy
 
 
@@ -93,3 +96,38 @@ def test_create_proxy_invalid_type(client, test_paths):
         },
     )
     assert res.status_code == 400
+
+
+def test_telethon_client_kwargs_mtproto():
+    from telethon.network.connection import ConnectionTcpMTProxyRandomizedIntermediate
+
+    row = Proxy(
+        id=2,
+        name="mt",
+        proxy_type="mtproto",
+        host="proxy.example.com",
+        port=443,
+        secret="dd00000000000000000000000000000000",
+        enabled=True,
+    )
+    kwargs = telethon_client_kwargs_from_row(row)
+    assert kwargs["connection"] is ConnectionTcpMTProxyRandomizedIntermediate
+    assert kwargs["proxy"] == (
+        "proxy.example.com",
+        443,
+        "dd00000000000000000000000000000000",
+    )
+    assert telethon_proxy_dict(row) is None
+
+
+def test_telethon_client_kwargs_mtproto_missing_secret():
+    row = Proxy(
+        id=3,
+        name="mt-bad",
+        proxy_type="mtproto",
+        host="proxy.example.com",
+        port=443,
+        secret=None,
+        enabled=True,
+    )
+    assert telethon_client_kwargs_from_row(row) == {}

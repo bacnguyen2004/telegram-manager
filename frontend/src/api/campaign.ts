@@ -10,7 +10,7 @@ import type {
   CampaignPlanData,
   CampaignPlanPayload,
 } from '../types/api'
-import type { ConversationJobData } from '../utils/conversationScript'
+import type { ConversationJobData } from '../types/api'
 import { request } from './http'
 
 export const campaignApi = {

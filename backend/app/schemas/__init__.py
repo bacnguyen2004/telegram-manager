@@ -1,5 +1,4 @@
 from .auth import (
-    LoginCodeData,
     LoginData,
     LoginRequest,
     RegisterData,
@@ -30,7 +29,6 @@ __all__ = [
     "LoginData",
     "RegisterRequest",
     "RegisterData",
-    "LoginCodeData",
     "Update2faRequest",
     "Update2faData",
     "UpdatePrivacyRequest",

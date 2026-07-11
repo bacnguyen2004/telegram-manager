@@ -1,14 +1,14 @@
-from ...schemas.conversation import (
-    ConversationScriptInput,
-    ConversationValidateData,
-    ConversationValidationIssue,
+from ....schemas.campaign import (
+    CampaignScript,
+    CampaignValidationData,
+    CampaignValidationIssue,
 )
 
 MAX_CONSECUTIVE_PER_SPEAKER = 4
 
 
-def validate_conversation_script(script: ConversationScriptInput) -> ConversationValidateData:
-    issues: list[ConversationValidationIssue] = []
+def validate_campaign_script_structure(script: CampaignScript) -> CampaignValidationData:
+    issues: list[CampaignValidationIssue] = []
     speaker_ids = {item.id for item in script.speakers}
     speaker_labels = {item.id: item.label for item in script.speakers}
     line_ids = {line.id for line in script.lines}
@@ -16,7 +16,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
 
     if not script.group_link.strip():
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="warning",
                 code="missing_group",
                 message="Chua nhap link nhom — can co truoc khi chay tac vu",
@@ -25,7 +25,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
 
     if len(script.speakers) < 2:
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="warning",
                 code="single_speaker",
                 message="Chi co 1 vai — hoi thoai can it nhat 2 nguoi",
@@ -35,7 +35,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
     phones = [item.phone.strip() for item in script.speakers if item.phone.strip()]
     if len(phones) != len(set(phones)):
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="error",
                 code="duplicate_phone",
                 message="Hai vai dang dung cung mot so dien thoai",
@@ -44,7 +44,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
 
     if not script.lines:
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="error",
                 code="no_lines",
                 message="Khong co dong hop le trong kich ban",
@@ -54,7 +54,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
     for line in script.lines:
         if line.speaker_id not in speaker_ids:
             issues.append(
-                ConversationValidationIssue(
+                CampaignValidationIssue(
                     level="error",
                     code="unknown_speaker",
                     message=f"Dong #{line.id}: khong tim thay vai '{line.speaker_id}'",
@@ -64,7 +64,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
         if line.reply_to is not None and line.reply_to not in line_ids:
             target_ref = refs_by_id.get(line.reply_to)
             issues.append(
-                ConversationValidationIssue(
+                CampaignValidationIssue(
                     level="error",
                     code="invalid_reply",
                     message=(
@@ -76,7 +76,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
             )
         if len(line.text) > 500:
             issues.append(
-                ConversationValidationIssue(
+                CampaignValidationIssue(
                     level="warning",
                     code="long_line",
                     message=f"Dong #{line.id}: cau dai ({len(line.text)} ky tu), co the khong tu nhien",
@@ -88,7 +88,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
     max_run = _max_consecutive_per_speaker(ordered)
     if max_run > MAX_CONSECUTIVE_PER_SPEAKER:
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="error",
                 code="max_consecutive",
                 message=(
@@ -99,7 +99,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
 
     if script.timing.delay_min_sec > script.timing.delay_max_sec:
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="warning",
                 code="delay_range",
                 message="delay_min_sec lon hon delay_max_sec — se tu hoan doi khi chay",
@@ -111,7 +111,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
         > script.timing.speaker_change_delay_max_sec
     ):
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="warning",
                 code="speaker_delay_range",
                 message=(
@@ -122,7 +122,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
 
     if script.timing.typing_min_sec > script.timing.typing_max_sec:
         issues.append(
-            ConversationValidationIssue(
+            CampaignValidationIssue(
                 level="warning",
                 code="typing_range",
                 message="typing_min_sec lon hon typing_max_sec — se tu hoan doi khi chay",
@@ -130,7 +130,7 @@ def validate_conversation_script(script: ConversationScriptInput) -> Conversatio
         )
 
     has_errors = any(item.level == "error" for item in issues)
-    return ConversationValidateData(
+    return CampaignValidationData(
         valid=not has_errors and bool(script.lines),
         line_count=len(script.lines),
         issues=issues,

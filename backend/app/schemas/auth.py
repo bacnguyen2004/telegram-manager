@@ -60,13 +60,6 @@ class RegisterData(BaseModel):
     session_file: str = ""
 
 
-class LoginCodeData(BaseModel):
-    status: Literal["success", "error"]
-    phone: str
-    code: str = ""
-    message: str = ""
-
-
 class Update2faRequest(BaseModel):
     phone: str = Field(..., examples=["+84901234567"])
     new_password: str = Field(..., min_length=1)

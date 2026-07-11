@@ -9,8 +9,8 @@ export const PAGE_LABELS: Record<string, string> = {
   '/dialogs': 'Tin nhắn',
   '/groups': 'Nhóm & kênh',
   '/tasks': 'Tác vụ hàng loạt',
-  '/conversation': 'Hội thoại tự nhiên',
-  '/campaign': 'Chiến dịch',
+  '/conversation': 'Hội thoại',
+  '/campaign': 'Hội thoại', // redirects → /conversation
   '/audit': 'Nhật ký hoạt động',
   '/security': 'Bảo mật',
 }
@@ -115,20 +115,6 @@ export const apiMap: ApiMapGroup[] = [
     ],
   },
   {
-    group: 'conversation',
-    label: 'Hội thoại tự nhiên',
-    items: [
-      { method: 'POST', path: '/api/conversation/validate', page: '/conversation' },
-      { method: 'POST', path: '/api/conversation/parse', page: '/conversation' },
-      { method: 'GET', path: '/api/conversation/jobs', page: '/conversation' },
-      { method: 'POST', path: '/api/conversation/jobs', page: '/conversation' },
-      { method: 'GET', path: '/api/conversation/jobs/{job_id}', page: '/conversation' },
-      { method: 'POST', path: '/api/conversation/jobs/{job_id}/resume', page: '/conversation' },
-      { method: 'POST', path: '/api/conversation/jobs/{job_id}/lines/{line_id}/retry', page: '/conversation' },
-      { method: 'POST', path: '/api/conversation/jobs/{job_id}/stop', page: '/conversation' },
-    ],
-  },
-  {
     group: 'metadata',
     label: 'Nhật ký',
     items: [
@@ -145,7 +131,6 @@ export const apiMap: ApiMapGroup[] = [
       { method: 'POST', path: '/api/auth/send-code', page: '/sessions?add=1' },
       { method: 'POST', path: '/api/auth/login', page: '/sessions?add=1' },
       { method: 'POST', path: '/api/auth/register', page: '/sessions?add=1' },
-      { method: 'GET', path: '/api/auth/login-code/{phone}', page: null },
       { method: 'PUT', path: '/api/auth/2fa', page: '/security' },
       { method: 'PUT', path: '/api/auth/privacy', page: '/security' },
     ],
@@ -175,19 +160,19 @@ export const apiMap: ApiMapGroup[] = [
   },
   {
     group: 'campaign',
-    label: 'Chiến dịch',
+    label: 'Hội thoại (chiến dịch AI)',
     items: [
-      { method: 'GET', path: '/api/campaign/ai-status', page: '/campaign' },
-      { method: 'GET', path: '/api/campaign/market', page: '/campaign' },
-      { method: 'POST', path: '/api/campaign/plan', page: '/campaign' },
-      { method: 'POST', path: '/api/campaign/jobs', page: '/campaign' },
-      { method: 'GET', path: '/api/campaign/jobs/{job_id}', page: '/campaign' },
-      { method: 'POST', path: '/api/campaign/jobs/{job_id}/stop', page: '/campaign' },
-      { method: 'POST', path: '/api/campaign/jobs/{job_id}/resume', page: '/campaign' },
+      { method: 'GET', path: '/api/campaign/ai-status', page: '/conversation' },
+      { method: 'GET', path: '/api/campaign/market', page: '/conversation' },
+      { method: 'POST', path: '/api/campaign/plan', page: '/conversation' },
+      { method: 'POST', path: '/api/campaign/jobs', page: '/conversation' },
+      { method: 'GET', path: '/api/campaign/jobs/{job_id}', page: '/conversation' },
+      { method: 'POST', path: '/api/campaign/jobs/{job_id}/stop', page: '/conversation' },
+      { method: 'POST', path: '/api/campaign/jobs/{job_id}/resume', page: '/conversation' },
       {
         method: 'POST',
         path: '/api/campaign/jobs/{job_id}/lines/{line_id}/retry',
-        page: '/campaign',
+        page: '/conversation',
       },
     ],
   },

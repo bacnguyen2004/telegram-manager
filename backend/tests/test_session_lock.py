@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -90,6 +91,7 @@ async def test_telethon_session_uses_lock_for_same_phone(test_paths):
     fake_client = MagicMock()
     fake_client.connect = AsyncMock()
     fake_client.disconnect = AsyncMock()
+    fake_client.is_connected = MagicMock(return_value=True)
 
     async def run() -> None:
         with patch(
@@ -104,3 +106,31 @@ async def test_telethon_session_uses_lock_for_same_phone(test_paths):
 
     await asyncio.gather(run(), run())
     assert state["max_active"] == 1
+
+
+def test_cleanup_stale_removes_dead_pid_lock(lock: SessionLock):
+    phone = "+84901111111"
+    lock.ensure_lock_dir()
+    path = lock._lock_path(phone)
+    path.write_text("99999999\n0\n", encoding="utf-8")
+    import time
+
+    old = time.time() - 10_000
+    os.utime(path, (old, old))
+
+    lock._cleanup_stale(path)
+    assert not path.exists()
+
+
+def test_cleanup_stale_keeps_live_pid_lock(lock: SessionLock):
+    phone = "+84902222222"
+    lock.ensure_lock_dir()
+    path = lock._lock_path(phone)
+    path.write_text(f"{os.getpid()}\n0\n", encoding="utf-8")
+    import time
+
+    old = time.time() - 10_000
+    os.utime(path, (old, old))
+
+    lock._cleanup_stale(path)
+    assert path.exists()
