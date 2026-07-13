@@ -110,7 +110,7 @@ const quickLinks = [
     key: 'conversation',
     to: '/conversation',
     label: 'Hội thoại',
-    desc: 'Chiến dịch AI · multi-acc · delay & typing trong group',
+    desc: 'Hội thoại AI · multi-acc · nhịp gửi theo plan trong group',
     accent: 'violet',
     icon: (
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden>

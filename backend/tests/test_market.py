@@ -1,8 +1,6 @@
 from datetime import datetime, timezone
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from app.services.campaign.goal_draft import build_goal_draft
-from app.schemas.campaign import CampaignGoalDraftRequest
 from app.services.market.binance_movers import (
     MoverQuote,
     movers_to_brief,
@@ -171,35 +169,6 @@ def test_tag_and_filter_news():
     q_hit = filter_news_items(items, q="solana")
     assert len(q_hit) == 1
     assert "Solana" in q_hit[0].title
-
-
-def test_goal_draft_template():
-    goal_vi = build_goal_draft(
-        CampaignGoalDraftRequest(
-            topic="btc_eth",
-            tone="debate",
-            conflict="medium",
-            language="vi",
-            message_length="short",
-            selected_news=["Optional headline"],
-            must_discuss_news=["Must headline ETF"],
-        )
-    )
-    assert "tiếng Việt" in goal_vi or "Tiếng Việt" in goal_vi or "Việt" in goal_vi
-    assert "Must headline ETF" in goal_vi
-    assert "BTC" in goal_vi or "btc" in goal_vi.lower()
-
-    goal_en = build_goal_draft(
-        CampaignGoalDraftRequest(
-            topic="btc_eth",
-            tone="casual",
-            conflict="low",
-            language="en",
-            message_length="short",
-        )
-    )
-    assert "English" in goal_en or "english" in goal_en.lower() or "BTC" in goal_en
-    assert "ừ" not in goal_en
 
 
 def test_parse_rss_date_rfc2822():

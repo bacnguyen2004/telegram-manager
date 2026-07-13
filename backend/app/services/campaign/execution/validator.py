@@ -4,13 +4,10 @@ from ....schemas.campaign import (
     CampaignValidationIssue,
 )
 
-MAX_CONSECUTIVE_PER_SPEAKER = 4
-
-
 def validate_campaign_script_structure(script: CampaignScript) -> CampaignValidationData:
+    """Structural checks only — no style/craft bans or suggestions."""
     issues: list[CampaignValidationIssue] = []
     speaker_ids = {item.id for item in script.speakers}
-    speaker_labels = {item.id: item.label for item in script.speakers}
     line_ids = {line.id for line in script.lines}
     refs_by_id = {line.id: line.script_ref for line in script.lines}
 
@@ -20,15 +17,6 @@ def validate_campaign_script_structure(script: CampaignScript) -> CampaignValida
                 level="warning",
                 code="missing_group",
                 message="Chua nhap link nhom — can co truoc khi chay tac vu",
-            )
-        )
-
-    if len(script.speakers) < 2:
-        issues.append(
-            CampaignValidationIssue(
-                level="warning",
-                code="single_speaker",
-                message="Chi co 1 vai — hoi thoai can it nhat 2 nguoi",
             )
         )
 
@@ -74,28 +62,6 @@ def validate_campaign_script_structure(script: CampaignScript) -> CampaignValida
                     line_id=line.id,
                 )
             )
-        if len(line.text) > 500:
-            issues.append(
-                CampaignValidationIssue(
-                    level="warning",
-                    code="long_line",
-                    message=f"Dong #{line.id}: cau dai ({len(line.text)} ky tu), co the khong tu nhien",
-                    line_id=line.id,
-                )
-            )
-
-    ordered = sorted(script.lines, key=lambda item: item.id)
-    max_run = _max_consecutive_per_speaker(ordered)
-    if max_run > MAX_CONSECUTIVE_PER_SPEAKER:
-        issues.append(
-            CampaignValidationIssue(
-                level="error",
-                code="max_consecutive",
-                message=(
-                    f"Mot vai noi lien tiep {max_run} cau — toi da {MAX_CONSECUTIVE_PER_SPEAKER}"
-                ),
-            )
-        )
 
     if script.timing.delay_min_sec > script.timing.delay_max_sec:
         issues.append(
@@ -136,17 +102,3 @@ def validate_campaign_script_structure(script: CampaignScript) -> CampaignValida
         issues=issues,
         script=script if script.lines else None,
     )
-
-
-def _max_consecutive_per_speaker(lines) -> int:
-    max_run = 0
-    current_run = 0
-    previous_speaker = ""
-    for line in lines:
-        if line.speaker_id == previous_speaker:
-            current_run += 1
-        else:
-            current_run = 1
-            previous_speaker = line.speaker_id
-        max_run = max(max_run, current_run)
-    return max_run

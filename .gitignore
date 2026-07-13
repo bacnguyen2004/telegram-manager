@@ -1,16 +1,33 @@
+# Secrets & local env
 backend/.env
 frontend/.env
 frontend/.env.local
+
+# Python
 backend/venv/
-backend/runtime/
-frontend/node_modules/
-frontend/dist/
-terminals/
-agent-tools/
 __pycache__/
 *.pyc
 .pytest_cache/
+*.egg-info/
+
+# Runtime data (sessions, locks, local SQLite, avatars)
+backend/runtime/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Agent / local tooling (not part of app runtime)
+terminals/
+agent-tools/
+mcps/
+.grok/
+
+# Session files if ever outside runtime/
 *.session
 *.session-journal
+
+# Scratch notes
 PLAN.md
 hoctap.md
+*.log

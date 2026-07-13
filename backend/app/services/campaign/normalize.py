@@ -24,6 +24,250 @@ def _clamp_duration(minutes: int) -> int:
     return max(5, min(int(minutes or 20), MAX_CAMPAIGN_DURATION_MIN))
 
 
+def _min_gap_for(plan: CampaignPlan, i: int) -> int:
+    """Min seconds between line i-1 and i."""
+    if i <= 0:
+        return 0
+    same = plan.lines[i].speaker_id == plan.lines[i - 1].speaker_id
+    return 2 if same else 3
+
+
+def _cluster_burst_indices(
+    times: list[int],
+    *,
+    burst_gap_max: int,
+    max_burst_size: int = 6,
+) -> list[list[int]]:
+    """Group line indices into bursts (adjacent gaps <= burst_gap_max).
+
+    Caps burst length so a multi-chunk dump of 30 tight msgs becomes several
+    short bursts we can pause between — not one monologue block.
+    """
+    if not times:
+        return []
+    max_burst_size = max(2, int(max_burst_size))
+    bursts: list[list[int]] = [[0]]
+    for i in range(1, len(times)):
+        gap = times[i] - times[i - 1]
+        same_burst = gap <= burst_gap_max and len(bursts[-1]) < max_burst_size
+        if same_burst:
+            bursts[-1].append(i)
+        else:
+            bursts.append([i])
+    return bursts
+
+
+def _split_oversized_bursts(
+    bursts: list[list[int]],
+    *,
+    max_burst_size: int = 6,
+) -> list[list[int]]:
+    out: list[list[int]] = []
+    for idxs in bursts:
+        if len(idxs) <= max_burst_size:
+            out.append(idxs)
+            continue
+        for start in range(0, len(idxs), max_burst_size):
+            chunk = idxs[start : start + max_burst_size]
+            # Avoid leaving a singleton tail when possible
+            if (
+                len(chunk) == 1
+                and out
+                and len(out[-1]) < max_burst_size
+            ):
+                out[-1].extend(chunk)
+            else:
+                out.append(chunk)
+    return out
+
+
+def _place_bursts_across_span(
+    plan: CampaignPlan,
+    times_in: list[int],
+    span_target: int,
+) -> list[int]:
+    """Map messages across the full duration with natural bursts + pauses.
+
+    Linear scale alone preserves pathological multi-chunk shapes (all chat in
+    the first 2 minutes, then an 18-minute dead zone). This clusters tight
+    AI gaps into bursts and redistributes *pauses between bursts* evenly.
+    """
+    n = len(times_in)
+    if n <= 1:
+        return [0] * n
+
+    # Ideal number of bursts for this duration (~one every 1.5–2 min)
+    ideal_bursts = max(2, min(n // 2, max(4, span_target // 100)))
+    max_burst_size = max(2, min(6, (n + ideal_bursts - 1) // ideal_bursts))
+
+    # Treat gaps up to this as "same burst" (phone double-tap / quick reply)
+    burst_gap_max = 45
+    bursts = _cluster_burst_indices(
+        times_in, burst_gap_max=burst_gap_max, max_burst_size=max_burst_size
+    )
+    if len(bursts) < min(ideal_bursts, n) and n >= 6:
+        bursts = _cluster_burst_indices(
+            times_in, burst_gap_max=20, max_burst_size=max_burst_size
+        )
+    bursts = _split_oversized_bursts(bursts, max_burst_size=max_burst_size)
+    if len(bursts) < 2:
+        # Fallback: chunk into groups of 3–5
+        bursts = []
+        i = 0
+        while i < n:
+            size = min(max_burst_size, 4 if n - i > 5 else max(1, n - i))
+            if n - i - size == 1:
+                size = n - i
+            bursts.append(list(range(i, min(n, i + size))))
+            i += size
+
+    # Internal gaps inside each burst (keep AI micro-timing, clamp 2–40s)
+    internal: list[list[int]] = []
+    for bi, idxs in enumerate(bursts):
+        igaps: list[int] = []
+        for j in range(1, len(idxs)):
+            li = idxs[j]
+            raw_g = max(0, times_in[li] - times_in[idxs[j - 1]])
+            g = raw_g if raw_g > 0 else _min_gap_for(plan, li)
+            g = max(_min_gap_for(plan, li), min(40, g))
+            igaps.append(g)
+        internal.append(igaps)
+
+    burst_spans = [sum(ig) for ig in internal]
+    total_internal = sum(burst_spans)
+    pause_slots = max(0, len(bursts) - 1)
+    # Leave ~55–70% of time for inter-burst pauses (group-chat feel)
+    pause_budget = max(0, span_target - total_internal)
+    if pause_slots == 0:
+        pauses: list[int] = []
+    else:
+        # Even-ish pauses with mild variation from original AI inter-burst gaps
+        raw_pauses: list[int] = []
+        for bi in range(pause_slots):
+            a = bursts[bi][-1]
+            b = bursts[bi + 1][0]
+            raw_pauses.append(max(0, times_in[b] - times_in[a]))
+        # Cap absurd AI pauses before weighting
+        max_raw = max(90, int(span_target * 0.12))
+        capped = [min(max_raw, max(30, p if p > 0 else 60)) for p in raw_pauses]
+        weight_sum = sum(capped) or 1
+        pauses = []
+        left = pause_budget
+        for i, w in enumerate(capped):
+            if i == pause_slots - 1:
+                pauses.append(max(30, left))
+            else:
+                p = int(round(pause_budget * (w / weight_sum)))
+                p = max(30, min(max_raw, p))
+                p = min(p, left - 30 * (pause_slots - i - 1))
+                pauses.append(max(30, p))
+                left -= pauses[-1]
+
+        # If pause budget too small, shrink mins
+        if sum(pauses) > pause_budget and pause_budget > 0:
+            scale = pause_budget / sum(pauses)
+            pauses = [max(15, int(round(p * scale))) for p in pauses]
+            # Fix sum
+            drift = pause_budget - sum(pauses)
+            if pauses:
+                pauses[-1] = max(15, pauses[-1] + drift)
+
+    # Build absolute times
+    out = [0] * n
+    t = 0
+    for bi, idxs in enumerate(bursts):
+        out[idxs[0]] = t
+        for j, li in enumerate(idxs[1:], start=1):
+            t = out[idxs[j - 1]] + internal[bi][j - 1]
+            out[li] = t
+        if bi < len(pauses):
+            t = out[idxs[-1]] + pauses[bi]
+        else:
+            t = out[idxs[-1]]
+
+    # Snap end to span_target
+    if out[-1] <= 0:
+        return [int(round(i * span_target / (n - 1))) for i in range(n)]
+
+    if out[-1] != span_target:
+        # Prefer extending the last pause rather than scaling micro-bursts
+        deficit = span_target - out[-1]
+        if deficit > 0 and pause_slots > 0:
+            # Push everything after first burst proportionally for residual only
+            scale = span_target / float(out[-1])
+            out = [int(round(x * scale)) for x in out]
+        elif deficit < 0:
+            scale = span_target / float(out[-1])
+            out = [int(round(x * scale)) for x in out]
+        out[0] = 0
+        out[-1] = span_target
+
+    # Enforce min gaps
+    for i in range(1, n):
+        out[i] = max(out[i], out[i - 1] + _min_gap_for(plan, i))
+    if out[-1] > span_target and out[-1] > 0:
+        scale = span_target / float(out[-1])
+        out = [int(round(x * scale)) for x in out]
+        out[0] = 0
+        for i in range(1, n):
+            out[i] = max(out[i], out[i - 1] + _min_gap_for(plan, i))
+        out[-1] = max(out[-1], out[-2] + _min_gap_for(plan, n - 1)) if n > 1 else 0
+        if out[-1] > span_target * 1.08:
+            # Last resort: even-ish end fix
+            out[-1] = span_target
+    elif out[-1] < span_target * 0.92:
+        # Stretch residual into the last inter-message gap that is a pause
+        out[-1] = span_target
+
+    return out
+
+
+def fit_timeline_to_duration(
+    plan: CampaignPlan,
+    duration_min: int | None = None,
+) -> CampaignPlan:
+    """Fit plan.at_sec into ~duration_min with natural burst/pause rhythm.
+
+    - Fills the full window (20 min request → last ≈ 1200s).
+    - Avoids multi-chunk pathology: 40 msgs in 2 min then 18 min silence.
+    - Keeps tight AI gaps as short bursts; redistributes long pauses.
+    """
+    if not plan.lines:
+        return plan
+
+    mins = _clamp_duration(int(duration_min or plan.duration_min or 20))
+    span_target = max(60, mins * 60)
+    n = len(plan.lines)
+
+    raw = [max(0, int(line.at_sec or 0)) for line in plan.lines]
+    base = raw[0]
+    times = [t - base for t in raw]
+    last = times[-1] if times else 0
+
+    if n == 1:
+        times = [0]
+    elif last <= 0:
+        times = [int(round(i * span_target / (n - 1))) for i in range(n)]
+    else:
+        times = _place_bursts_across_span(plan, times, span_target)
+
+    # Final safety: first=0, non-decreasing, end near span
+    times[0] = 0
+    for i in range(1, n):
+        times[i] = max(times[i], times[i - 1] + _min_gap_for(plan, i))
+    if n > 1 and times[-1] < span_target:
+        times[-1] = span_target
+        for i in range(n - 2, 0, -1):
+            times[i] = min(times[i], times[i + 1] - _min_gap_for(plan, i + 1))
+            times[i] = max(times[i], times[i - 1] + _min_gap_for(plan, i))
+
+    new_lines = [
+        line.model_copy(update={"at_sec": times[i]})
+        for i, line in enumerate(plan.lines)
+    ]
+    return plan.model_copy(update={"lines": new_lines, "duration_min": mins})
+
+
 def _phone_sentence_case(text: str) -> str:
     """Phone keyboard auto-caps the first letter of each message."""
     t = (text or "").strip()
@@ -123,6 +367,9 @@ def plan_to_script(
     group_link: str,
     peer_id: str | None = None,
 ) -> CampaignScript:
+    # Guarantee runtime length matches plan.duration_min (AI often under-schedules)
+    plan = fit_timeline_to_duration(plan, plan.duration_min)
+
     speaker_models = [
         CampaignSpeakerRuntimeInput(
             id=item.id.strip(),

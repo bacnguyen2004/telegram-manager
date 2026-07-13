@@ -142,7 +142,8 @@ class CampaignJobStore:
             if job is None:
                 return None
             job.stop_requested = True
-            if job.status == "running":
+            # Mark stopped for UI immediately (runner also finishes as stopped).
+            if job.status in ("running", "pending"):
                 job.status = "stopped"
             job.updated_at = _utc_now()
             session.add(job)
@@ -151,12 +152,26 @@ class CampaignJobStore:
             return job
 
     def prepare_resume(self, job_id: int) -> CampaignJob | None:
+        """Reset stop flag so runner can continue pending/error lines.
+
+        Not allowed when already running or fully done (no work left).
+        """
         with Session(get_engine()) as session:
             job = session.get(CampaignJob, job_id)
             if job is None:
                 return None
             if job.status == "running":
                 return None
+            if job.status == "done":
+                return None
+
+            results = self._load_line_results(job)
+            has_work = any(
+                item.status in ("pending", "error", "running") for item in results
+            )
+            if not has_work and results:
+                return None
+
             job.stop_requested = False
             job.status = "pending"
             job.error_message = None

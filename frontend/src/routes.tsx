@@ -27,6 +27,7 @@ export const appRouter = createBrowserRouter([
       { path: 'groups', element: <GroupsPage /> },
       { path: 'dialogs', element: <DialogsPage /> },
       { path: 'tasks', element: <TasksPage /> },
+      // Product: Hội thoại · Code module: campaign (API /api/campaign/*)
       { path: 'conversation', element: <CampaignPage /> },
       { path: 'campaign', element: <Navigate to="/conversation" replace /> },
       { path: 'audit', element: <AuditPage /> },

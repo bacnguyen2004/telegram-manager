@@ -657,8 +657,16 @@ export type CampaignRole = 'lead' | 'echo' | 'reactor' | 'lurker' | 'member'
 export interface CampaignSpeaker {
   id: string
   label: string
+  /** Executor only — stripped before LLM on backend */
   phone: string
   role: string
+  activity?: string
+  message_style?: string
+  sentiment?: string
+  knowledge_level?: string
+  preferred_assets?: string[]
+  can_open?: boolean
+  emoji_habit?: string
 }
 
 export interface CampaignPlanLine {
@@ -678,6 +686,7 @@ export interface CampaignPlan {
 export type CampaignDensity = 'light' | 'normal' | 'dense'
 
 export interface CampaignPlanPayload {
+  /** Intent only — language/topic/tone; personas live on speakers */
   goal: string
   duration_min: number
   target_lines?: number
@@ -694,8 +703,31 @@ export interface CampaignPlanPayload {
   news_keywords?: string[]
   speakers: CampaignSpeaker[]
   use_market_context?: boolean
-  /** OpenAI model id; omit/empty = server default */
+  /** OpenAI model id; omit/empty = server default (execution config, not content) */
   model?: string | null
+  /** 0–1 share of replies; backend maps to min/max counts */
+  reply_rate?: number | null
+  timing_pattern?: 'even' | 'natural_bursts' | 'slow_group' | 'fast_chat'
+  market_intensity?: 'low' | 'medium' | 'high'
+  numeric_detail?: 'none' | 'approx' | 'exact'
+  max_news_topics?: number
+  /** mostly_short 70/25/5 · mixed 50/40/10 · detailed 30/50/20 */
+  message_length_preset?: 'mostly_short' | 'mixed' | 'detailed'
+  message_length_short_pct?: number
+  message_length_medium_pct?: number
+  message_length_long_pct?: number
+  /** natural = a b b c d d d a · rotate = a b c d a b … */
+  speaker_order?: 'natural' | 'rotate' | 'messy' | 'lead_heavy'
+  max_consecutive_same_speaker?: number
+  /** clean | casual | messy | degen — speech style */
+  chat_style?: 'clean' | 'casual' | 'messy' | 'degen'
+  allow_typos?: boolean
+  allow_acks?: boolean
+  allow_filler?: boolean
+  /** Telegram multi-bubble: short then continue (ok → i love market) */
+  split_bubbles?: 'off' | 'sometimes' | 'often'
+  /** 0–100: share of same-speaker continue pairs (preferred over split_bubbles) */
+  split_continue_pct?: number
 }
 
 export interface CampaignMarketCoin {
@@ -732,42 +764,6 @@ export interface CampaignMarketContext {
   error?: string | null
   filter_q?: string
   filter_tags?: string[]
-}
-
-export type CampaignGoalTopic = 'btc_eth' | 'alts' | 'macro' | 'mix'
-export type CampaignGoalTone = 'casual' | 'debate' | 'hype' | 'skeptical'
-export type CampaignGoalConflict = 'none' | 'low' | 'medium'
-export type CampaignGoalMsgLen = 'short' | 'medium'
-
-export interface CampaignGoalDraftPayload {
-  topic: CampaignGoalTopic
-  tone: CampaignGoalTone
-  conflict: CampaignGoalConflict
-  language: string
-  message_length: CampaignGoalMsgLen
-  selected_news?: string[]
-  must_discuss_news?: string[]
-}
-
-export interface CampaignGoalDraftData {
-  goal: string
-  source: string
-}
-
-export interface CampaignInjectPayload {
-  angle?: string
-  selected_news?: string[]
-  line_count?: number
-  use_live_price?: boolean
-  model?: string | null
-}
-
-export interface CampaignInjectData {
-  job_id: number
-  injected_count: number
-  new_total_lines: number
-  lines: CampaignPlanLine[]
-  status: string
 }
 
 export interface CampaignPlanData {
@@ -823,37 +819,13 @@ export interface ConversationJobData {
   error_message?: string | null
 }
 
-export interface CampaignModelPriceRow {
-  id: string
-  input_per_1m?: number | null
-  output_per_1m?: number | null
-  tier?: string
-  tier_label?: string
-  note?: string
-  known?: boolean
-  cost_index?: number | null
-  price_badge?: string
-}
-
-export interface CampaignPlanCostEstimate {
-  model: string
-  batches_assumed?: number | null
-  input_tokens_assumed?: number | null
-  output_tokens_assumed?: number | null
-  estimate_usd?: number | null
-  note?: string
-}
-
 export interface CampaignAiStatusData {
   ai_enabled: boolean
   configured: boolean
   model: string
-  /** Selectable models for UI picker */
+  /** Default + optional env suggestions (not a price catalog) */
   models?: string[]
-  model_catalog?: CampaignModelPriceRow[]
-  plan_cost_estimates_150?: CampaignPlanCostEstimate[]
-  pricing_unit?: string
-  pricing_source?: string
-  models_source?: string
+  /** Official OpenAI pricing docs URL */
+  pricing_url?: string
   message: string
 }

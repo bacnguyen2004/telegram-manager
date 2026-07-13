@@ -58,7 +58,8 @@ def test_validate_rejects_unknown_reply_target():
     assert any(item.code == "invalid_reply" for item in result.issues)
 
 
-def test_validate_rejects_more_than_four_consecutive_lines():
+def test_validate_allows_long_same_speaker_runs():
+    """Style caps removed — consecutive lines are not blocked."""
     script = CampaignScript(
         group_link="https://t.me/g",
         speakers=_two_speakers(),
@@ -66,8 +67,8 @@ def test_validate_rejects_more_than_four_consecutive_lines():
         timing=CampaignTimingInput(),
     )
     result = validate_campaign_script_structure(script)
-    assert result.valid is False
-    assert any(item.code == "max_consecutive" for item in result.issues)
+    assert result.valid is True
+    assert not any(item.code == "max_consecutive" for item in result.issues)
 
 
 def test_validate_accepts_balanced_script():

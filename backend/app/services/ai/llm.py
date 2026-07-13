@@ -9,13 +9,18 @@ from ...config import settings
 
 _MODEL_RE = re.compile(r"^[a-zA-Z0-9._:-]{2,80}$")
 
+# Official docs — UI links here; we do not ship price tables.
+OPENAI_PRICING_URL = "https://platform.openai.com/docs/pricing"
+
 
 def is_ai_configured() -> bool:
+    settings.reload_ai_env()
     return settings.ai_configured
 
 
 def resolve_openai_model(model: str | None = None) -> str:
     """Pick model: explicit override (allowlisted or safe id) else default env model."""
+    settings.reload_ai_env()
     default = settings.openai_model
     allowed = settings.openai_models
     raw = (model or "").strip()
@@ -28,25 +33,21 @@ def resolve_openai_model(model: str | None = None) -> str:
         return raw
     raise ValueError(
         f"Model khong hop le: {raw!r}. "
-        f"Chon trong: {', '.join(allowed)} (hoac id hop le)"
+        f"Dung id hop le (vd gpt-4.1-mini) hoac chon: {', '.join(allowed)}"
     )
 
 
 def ai_status_payload() -> dict[str, Any]:
-    from .model_catalog import DEFAULT_GPT_CHAT_MODELS, model_catalog
-
+    """Minimal AI status for campaign UI — no price catalog."""
+    settings.reload_ai_env()
     configured = settings.ai_configured
-    default = settings.openai_model if configured else ""
-    models = settings.openai_models if configured else list(DEFAULT_GPT_CHAT_MODELS)
-    catalog = model_catalog(models if models else list(DEFAULT_GPT_CHAT_MODELS))
+    default = settings.openai_model
     return {
         "ai_enabled": settings.ai_enabled,
         "configured": configured,
         "model": default,
-        "models": models,
-        "model_catalog": catalog,
-        "pricing_unit": "USD per 1M tokens (standard short context)",
-        "pricing_source": "https://developers.openai.com/api/docs/pricing",
+        "models": settings.openai_models,
+        "pricing_url": OPENAI_PRICING_URL,
         "message": (
             "AI san sang"
             if configured
@@ -60,34 +61,8 @@ def ai_status_payload() -> dict[str, Any]:
 
 
 async def ai_status_payload_async() -> dict[str, Any]:
-    """Status + try live OpenAI model list for full GPT catalog."""
-    from .model_catalog import (
-        DEFAULT_GPT_CHAT_MODELS,
-        estimate_plan_cost_usd,
-        fetch_openai_gpt_model_ids,
-        model_catalog,
-    )
-
-    base = ai_status_payload()
-    live = await fetch_openai_gpt_model_ids() if settings.ai_configured else None
-    if live:
-        # Prefer live GPT ids; keep env default first
-        default = base.get("model") or settings.openai_model
-        merged: list[str] = []
-        for m in [default, *live, *DEFAULT_GPT_CHAT_MODELS]:
-            if m and m not in merged:
-                merged.append(m)
-        base["models"] = merged
-        base["models_source"] = "openai_api+catalog"
-    else:
-        base["models_source"] = "env_or_catalog"
-    base["model_catalog"] = model_catalog(base["models"])
-    # Attach rough cost for default + selected-friendly models
-    estimates = []
-    for mid in (base["models"] or [])[:24]:
-        estimates.append(estimate_plan_cost_usd(mid, target_lines=150))
-    base["plan_cost_estimates_150"] = estimates
-    return base
+    """Same as sync status (async for FastAPI router)."""
+    return ai_status_payload()
 
 
 async def generate_chat_text(
@@ -99,6 +74,7 @@ async def generate_chat_text(
     timeout_seconds: float | None = None,
     model: str | None = None,
 ) -> str:
+    settings.reload_ai_env()
     if not settings.ai_configured:
         raise ValueError(
             "AI chua cau hinh — dat AI_ENABLED=true va OPENAI_API_KEY trong backend/.env"

@@ -1,19 +1,20 @@
+"""App settings from backend/.env — single source for Telegram, DB, AI, realtime."""
+
+from __future__ import annotations
+
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-
 BASE_DIR = Path(__file__).resolve().parent.parent
 _ENV_FILE = BASE_DIR / ".env"
 
 
-def _load_env(*, override: bool = False) -> None:
-    """Load backend/.env. override=True so file wins over stale empty shell vars."""
+def _load_env(*, override: bool = True) -> None:
     load_dotenv(_ENV_FILE, override=override)
 
 
-# Initial load (override so local .env is source of truth for AI keys etc.)
 _load_env(override=True)
 
 
@@ -26,6 +27,14 @@ def _env_str(name: str, default: str = "") -> str:
     return (os.getenv(name, default) or default).strip().strip("\"'")
 
 
+def _env_float(name: str, default: str) -> float:
+    return float(_env_str(name, default) or default)
+
+
+def _env_int(name: str, default: str) -> int:
+    return int(_env_str(name, default) or default)
+
+
 def resolve_project_path(value: str) -> Path:
     path = Path(value)
     if not path.is_absolute():
@@ -34,118 +43,84 @@ def resolve_project_path(value: str) -> Path:
 
 
 class Settings:
+    """Runtime config. Call reload_ai_env() after editing AI keys in .env."""
+
     app_name: str = "Telegram Manager"
     api_prefix: str = "/api"
 
-    telegram_api_id: int = int(os.getenv("TELEGRAM_API_ID", "0") or 0)
-    telegram_api_hash: str = os.getenv("TELEGRAM_API_HASH", "")
+    def __init__(self) -> None:
+        self.refresh()
 
-    session_dir: Path = resolve_project_path(
-        os.getenv("SESSION_FOLDER")
-        or os.getenv("SESSION_DIR", "runtime/sessions")
-    )
-    session_lock_dir: Path = resolve_project_path(
-        os.getenv("SESSION_LOCK_DIR", "runtime/locks")
-    )
-    session_lock_timeout: float = float(os.getenv("TG_SESSION_LOCK_TIMEOUT", "120") or 120)
-    session_lock_stale_seconds: float = float(
-        os.getenv("TG_SESSION_LOCK_STALE_SECONDS", "300") or 300
-    )
+    def refresh(self) -> None:
+        """Reload all settings from env (Telegram + DB + realtime + AI)."""
+        _load_env(override=True)
 
-    database_url: str = os.getenv(
-        "DATABASE_URL",
-        f"sqlite:///{(BASE_DIR / 'runtime' / 'telegram_manager.db').as_posix()}",
-    )
-    database_enabled: bool = os.getenv("DATABASE_ENABLED", "true").lower() not in {
-        "0",
-        "false",
-        "no",
-    }
+        self.telegram_api_id = _env_int("TELEGRAM_API_ID", "0")
+        self.telegram_api_hash = _env_str("TELEGRAM_API_HASH", "")
+
+        session_raw = (
+            os.getenv("SESSION_FOLDER")
+            or os.getenv("SESSION_DIR")
+            or "runtime/sessions"
+        )
+        self.session_dir = resolve_project_path(session_raw)
+        self.session_lock_dir = resolve_project_path(
+            os.getenv("SESSION_LOCK_DIR", "runtime/locks")
+        )
+        self.session_lock_timeout = _env_float("TG_SESSION_LOCK_TIMEOUT", "120")
+        self.session_lock_stale_seconds = _env_float(
+            "TG_SESSION_LOCK_STALE_SECONDS", "300"
+        )
+
+        self.database_url = _env_str(
+            "DATABASE_URL",
+            f"sqlite:///{(BASE_DIR / 'runtime' / 'telegram_manager.db').as_posix()}",
+        )
+        self.database_enabled = _env_bool("DATABASE_ENABLED", "true")
+
+        self.avatar_dir = resolve_project_path(os.getenv("AVATAR_DIR", "runtime/avatars"))
+
+        self.telegram_listener_enabled = _env_bool("TELEGRAM_LISTENER_ENABLED", "true")
+        self.telegram_realtime_mode = _env_str("TELEGRAM_REALTIME_MODE", "").lower()
+        self.telegram_listener_idle_seconds = _env_float(
+            "TELEGRAM_LISTENER_IDLE_SECONDS", "300"
+        )
+        self.telegram_listener_reconnect_seconds = _env_float(
+            "TELEGRAM_LISTENER_RECONNECT_SECONDS", "15"
+        )
+        self.telegram_client_idle_seconds = _env_float(
+            "TELEGRAM_CLIENT_IDLE_SECONDS", "120"
+        )
+
+        self._load_ai()
+
+    def reload_ai_env(self) -> None:
+        """Re-read AI-related keys only (after editing .env without restart)."""
+        _load_env(override=True)
+        self._load_ai()
+
+    def _load_ai(self) -> None:
+        self.ai_enabled = _env_bool("AI_ENABLED", "false")
+        self.openai_api_key = _env_str("OPENAI_API_KEY", "")
+        self.openai_model = _env_str("OPENAI_MODEL", "gpt-4.1-mini") or "gpt-4.1-mini"
+        raw_models = _env_str("OPENAI_MODELS", "")
+        listed = [m.strip() for m in raw_models.split(",") if m.strip()] if raw_models else []
+        models: list[str] = []
+        for m in [self.openai_model, *listed]:
+            if m and m not in models:
+                models.append(m)
+        self.openai_models = models
+        self.openai_temperature = _env_float("OPENAI_TEMPERATURE", "0.9")
+        self.openai_max_output_tokens = _env_int("OPENAI_MAX_OUTPUT_TOKENS", "4000")
+        self.openai_timeout_seconds = _env_float("OPENAI_TIMEOUT_SECONDS", "120")
+
+    @property
+    def ai_configured(self) -> bool:
+        return bool(self.ai_enabled and self.openai_api_key)
 
     def validate_telegram_config(self) -> None:
         if not self.telegram_api_id or not self.telegram_api_hash:
             raise ValueError("Missing TELEGRAM_API_ID or TELEGRAM_API_HASH in .env")
-
-    avatar_dir: Path = resolve_project_path(
-        os.getenv("AVATAR_DIR", "runtime/avatars")
-    )
-
-    telegram_listener_enabled: bool = os.getenv(
-        "TELEGRAM_LISTENER_ENABLED", "true"
-    ).lower() not in {"0", "false", "no"}
-    telegram_realtime_mode: str = os.getenv("TELEGRAM_REALTIME_MODE", "").strip().lower()
-    telegram_listener_idle_seconds: float = float(
-        os.getenv("TELEGRAM_LISTENER_IDLE_SECONDS", "300") or 300
-    )
-    telegram_listener_reconnect_seconds: float = float(
-        os.getenv("TELEGRAM_LISTENER_RECONNECT_SECONDS", "15") or 15
-    )
-    # Keep Telethon TCP sessions warm between campaign typing/sends (reduces
-    # connect thrash + Windows "Connection._recv_loop GeneratorExit" noise).
-    telegram_client_idle_seconds: float = float(
-        os.getenv("TELEGRAM_CLIENT_IDLE_SECONDS", "120") or 120
-    )
-
-    def reload_ai_env(self) -> None:
-        """Re-read backend/.env for AI settings (uvicorn does not reload on .env change)."""
-        _load_env(override=True)
-
-    @property
-    def ai_enabled(self) -> bool:
-        self.reload_ai_env()
-        return _env_bool("AI_ENABLED", "false")
-
-    @property
-    def openai_api_key(self) -> str:
-        self.reload_ai_env()
-        return _env_str("OPENAI_API_KEY", "")
-
-    @property
-    def openai_model(self) -> str:
-        self.reload_ai_env()
-        return _env_str("OPENAI_MODEL", "gpt-4.1-mini") or "gpt-4.1-mini"
-
-    @property
-    def openai_models(self) -> list[str]:
-        """Selectable models for campaign UI (OPENAI_MODELS=comma list)."""
-        self.reload_ai_env()
-        default = self.openai_model
-        raw = _env_str("OPENAI_MODELS", "")
-        if raw:
-            listed = [m.strip() for m in raw.split(",") if m.strip()]
-        else:
-            # Full default GPT chat catalog (see services.ai.model_catalog)
-            from .services.ai.model_catalog import DEFAULT_GPT_CHAT_MODELS
-
-            listed = list(DEFAULT_GPT_CHAT_MODELS)
-        out: list[str] = []
-        for m in [default, *listed]:
-            if m and m not in out:
-                out.append(m)
-        return out
-
-    @property
-    def openai_temperature(self) -> float:
-        self.reload_ai_env()
-        return float(_env_str("OPENAI_TEMPERATURE", "0.9") or 0.9)
-
-    @property
-    def openai_max_output_tokens(self) -> int:
-        self.reload_ai_env()
-        return int(_env_str("OPENAI_MAX_OUTPUT_TOKENS", "4000") or 4000)
-
-    @property
-    def openai_timeout_seconds(self) -> float:
-        self.reload_ai_env()
-        return float(_env_str("OPENAI_TIMEOUT_SECONDS", "120") or 120)
-
-    @property
-    def ai_configured(self) -> bool:
-        # Single reload for both flags
-        self.reload_ai_env()
-        enabled = _env_bool("AI_ENABLED", "false")
-        key = _env_str("OPENAI_API_KEY", "")
-        return bool(enabled and key)
 
     @property
     def realtime_mode(self) -> str:
@@ -191,5 +166,4 @@ session_lock = SessionLock(
     stale_seconds=settings.session_lock_stale_seconds,
 )
 
-# Re-export for services that need project root.
 __all__ = ["BASE_DIR", "session_lock", "settings"]

@@ -1,4 +1,8 @@
-"""Prompts for AI campaign planner (full + chunked continuation)."""
+"""Prompts for AI campaign planner — technical JSON contract only.
+
+No craft rules, bans, quality rubrics, or retry suggestions.
+Style/intent come only from the UI goal (and optional market facts).
+"""
 
 from __future__ import annotations
 
@@ -6,12 +10,18 @@ import json
 from typing import Any
 
 
-SYSTEM_PROMPT = """You are writing a realistic Telegram group chat between several accounts.
+SYSTEM_PROMPT = """You write a multi-account Telegram group chat about the crypto market.
 
-Return only valid JSON, with no markdown fences and no explanation:
+TASK (always):
+1) Write natural chat bubbles (crypto market today — price vibe, news, bags, reactions).
+2) Distribute those messages reasonably across the user duration_min window
+   (at_sec from 0 → near duration_min*60).
+3) Return ONLY valid JSON (no markdown fences, no commentary).
+
+JSON shape:
 {
   "title": "short title",
-  "duration_min": <int>,
+  "duration_min": <int — copy from input>,
   "lines": [
     {
       "at_sec": <int, non-decreasing from 0>,
@@ -23,232 +33,33 @@ Return only valid JSON, with no markdown fences and no explanation:
   ]
 }
 
-Technical contract:
+Technical only:
 - lines.length must equal target_lines exactly.
 - speaker_id must be one of cast_ids.
-- Keep one language for every text field.
-- action="reply" must point to an earlier line in this batch.
-- action="send" must use reply_to_line=null.
-- Do not put cast labels, names, or phone numbers inside message text.
-- No markdown, hashtags, links, or @mentions.
-
-=== CONVERSATION > SENTENCES (most important) ===
-Quality is judged on the WHOLE chat arc, not each line alone.
-A real trader Telegram over ~100 messages has RHYTHM:
-price scan → someone longs/shorts → "entry where?" → stop-loss pain →
-other coin / AI / airdrop / bot / life → BTC briefly → drift again.
-It does NOT loop mechanically through BTC → ETH → SOL → news → BTC.
-
-Each generation batch has a HARD BEAT from beat / beat_block.
-Make that PRIMARY dominate this batch.
-Do not keep writing the same majors+news loop with new wording.
-
-MARKET SHARE RULES come with the beat as high / medium / low.
-If market_share=low, most lines are NOT about BTC/ETH/SOL prices.
-
-=== SPEAKER PERSONALITIES (critical — blur roles) ===
-Each speaker_id has a speaker_card: persona + style + tics + avoid.
-"role" is only a SOFT prior, not a job title.
-
-Rules:
-- Act like a person with mood, not an NPC template.
-- Mix moves: react, ask, disagree, change topic, go quiet, double-text, be wrong.
-- Lead may cite data, but sometimes sounds unsure or asks others.
-- Reactor may joke or complain, but must also have real short takes.
-- Echo may agree sometimes, but must also push back, ignore, or open a topic.
-- Member/lurker is usually quiet but may start a topic occasionally.
-- Prefer distinct voices.
-- The lead must not host the whole room.
-
-=== NO HOST TRANSITIONS (critical) ===
-Forbidden because they sound like AI or meeting narration:
-"to sum up", "overall", "back to", "speaking of", "on another note",
-"let's move on", "as I said earlier", "to recap", "in conclusion".
-Real Telegram users just drop the next thought.
-
-=== REDUCE OVERUSE (not hard bans) ===
-These are fine in small amounts, but do not repeat the same reply shape:
-- "Fair, but" / "Yeah, but" / "True, but"
-- Same / Not sold / Kinda as openers
-- Lol / Ouch / Pain / Wtf / Lmao
-Rotate with natural alternatives: Nah / Idk / Looks off / Hard pass / Wait /
-Hmm / Bro no / a real short take / an abrupt topic jump.
-
-=== MESSAGE SHAPE (Telegram phone bubbles — critical) ===
-Real Telegram messages are short.
-Prefer short–long rhythm instead of polished complete sentences.
-
-Target mix per batch:
-| Length     | Share   | Pattern |
-| 1–2 words  | ~5–10%  | pure micro-ack or reaction |
-| 3–5 words  | 35–40%  | short take |
-| 6–8 words  | 30–35%  | normal take |
-| 9–12 words | 15–20%  | fuller take |
-| >12 words  | 0–5%    | almost never; split into bubbles |
-
-MICRO-ACK AS ITS OWN BUBBLE:
-Less natural:
-A: Me too, feels steady near here
-
-More natural:
-A: Me too
-A: Feels steady near here
-
-Pure micro-acks should remain uncommon overall, but when used, prefer a separate
-bubble instead of gluing everything into one sentence.
-
-=== SAME-SPEAKER BURSTS (required) ===
-Real Telegram users often send several consecutive bubbles before someone responds.
-
-For every batch:
-- Include multiple same-speaker bursts.
-- About 25–40% of all lines should belong to same-speaker consecutive sequences.
-- Include several 2-message bursts.
-- Include at least one 3-message burst when target_lines >= 15.
-- A 4-message burst is allowed occasionally.
-- Never allow more than 4 consecutive lines from one speaker.
-- Do not force a speaker change after every message.
-- Avoid mechanical A-B-C-D-A-B-C-D rotation.
-- Avoid long clean A-B-A-B ping-pong.
-
-Split one thought naturally:
-Good:
-A: Ok
-A: That project sounds decent
-
-Good:
-B: Wait
-B: Wrong chart
-B: My bad
-
-Good:
-C: Yeah
-C: Could work
-C: Not buying yet though
-
-Bad:
-A: Ok, that project sounds decent and I might check it later
-
-Better:
-A: Ok
-A: That project sounds decent
-A: Might check it later
-
-=== NATURAL MESSAGE TIMING (critical) ===
-Do not distribute messages evenly across the full duration.
-Telegram timing must be clustered and irregular.
-
-Same-speaker consecutive bubbles:
-- Usually 0–4 seconds apart.
-- A quick correction may be 0–2 seconds apart.
-- A follow-up thought may be 2–7 seconds apart.
-- Two instant bubbles may share the same at_sec occasionally.
-- Do not place normal double-text messages 20–60 seconds apart.
-
-Direct replies:
-- Usually 3–20 seconds after the relevant message.
-- Sometimes reply later to an older line.
-
-Normal pauses:
-- Commonly 10–45 seconds.
-- Occasionally 45–120 seconds when the room goes quiet.
-
-Timing rules:
-- Keep at_sec non-decreasing.
-- Do not use nearly identical gaps repeatedly.
-- Do not calculate duration / target_lines and spread messages evenly.
-- duration_min is an approximate chat window, not a spacing formula.
-- The final message does not need to land exactly on duration_min.
-
-Good timing:
-{"at_sec": 21, "speaker_id": "a", "action": "send", "text": "Ok", "reply_to_line": null}
-{"at_sec": 22, "speaker_id": "a", "action": "send", "text": "That project sounds decent", "reply_to_line": null}
-
-Good timing:
-{"at_sec": 45, "speaker_id": "b", "action": "send", "text": "Wait", "reply_to_line": null}
-{"at_sec": 47, "speaker_id": "b", "action": "send", "text": "Wrong chart", "reply_to_line": null}
-{"at_sec": 50, "speaker_id": "b", "action": "send", "text": "My bad", "reply_to_line": null}
-
-Good speaker rhythm:
-A: BTC looks sleepy
-A: Still holding though
-C: Yeah
-C: Volume looks weak
-C: Or wait
-C: Wrong timeframe
-B: Lmao
-A: Anyone checked that project?
-B: Not yet
-B: Looks decent from the homepage
-
-=== REPLY BEHAVIOR ===
-- Use replies only when someone is answering a specific earlier message.
-- About 15–25% of lines may be replies.
-- A reply must point to an earlier line in the same batch.
-- Do not reply to your own immediately previous message unless correcting it is truly natural.
-- Do not make every answer a formal reply.
-- Sometimes reply to an older line after another topic briefly interrupts.
-
-=== HUMAN MESS (critical) ===
-The chat should feel slightly imperfect, not like polished copy:
-- Slang: lol, lmao, bro, idk, wtf, nvm, my bad, wait, fr, tbh
-- Incomplete thoughts: "or wait", "actually nvm", "ignore that"
-- Small corrections or double-sends
-- One slightly off-topic line sometimes
-- Rare typo-ish wording is okay
-Do not make every line a neat "Fair, but ETH still..." sentence.
-
-=== ANTI-LOOP (price + motifs) ===
-- do_not_reuse_phrases means banned phrase reuse.
-- already_said_topics is context only; do not re-explain it.
-- Repeat the same exact level at most 1–2 times in this batch.
-- Prefer vibe language over repeating exact numbers.
-- Each news theme should appear only 1–2 casual times in the full plan.
-- TOP MOVERS are gossip context only, never promotional copy.
-
-Good:
-- Messy speaker order
-- Same-speaker bursts
-- Irregular timing
-- Some delayed replies
-- Short–long rhythm
-- Non-leads opening topics
-
-Bad:
-- A-B-C-D panel rotation
-- One message per speaker every turn
-- Equal 28-second or 30-second gaps
-- Lead hosting every topic
-- Price in most lines
-- Every reply starting with the same phrase
-- All messages having similar length
-
-Language lock: en | vi | auto from goal — one language only.
-Market facts: only from LIVE MARKET FACTS.
-Never invent prices, percentages, headlines, laws, ETF flows, dates, upgrades,
-or organization actions.
-
-Silent check before JSON:
-1. Is the HARD BEAT clearly dominant?
-2. Are voices distinct and varied?
-3. Does the conversation progress instead of restating majors?
-4. Are there several natural 2-message bursts?
-5. Is there at least one 3-message burst when target_lines >= 15?
-6. Are same-speaker burst gaps mostly 0–4 seconds?
-7. Are the overall timing gaps irregular rather than evenly spaced?
-8. Is the lead not hosting everything?
-9. Are replies valid and used only when appropriate?
-10. Are all facts grounded in LIVE MARKET FACTS?
+- action="reply" → reply_to_line points to an earlier line in THIS batch.
+- action="send" → reply_to_line=null.
+- TIMELINE (from user INPUT duration_min):
+  - First line at_sec ≈ 0; last line at_sec ≈ duration_min*60
+    (20 min → ~1200; 60 min → ~3600).
+  - Pace the WHOLE chat across that window — not all messages in the first 2–5 minutes.
+  - Natural group chat: short bursts then longer pauses (not metronome-even).
+  - If batch.at_sec_window is set, place THIS batch only inside start→end seconds.
+  - Continuation: continue after previous_tail inside the given window.
+- Write every line.text in the LANGUAGE required by the user payload / PREFS (see LANGUAGE).
+- If LIVE MARKET FACTS are provided, do not invent prices, %, or headlines not listed.
+- Prefer approximate wording over inventing alternate percentages.
+- Prefer short Telegram bubbles over market-host recap sentences.
 """
 
 
-CONTINUATION_SYSTEM_PROMPT = """You continue an existing Telegram group chat.
+CONTINUATION_SYSTEM_PROMPT = """You continue a multi-account Telegram crypto-market group chat.
 
-Return only valid JSON:
+TASK: keep writing the same chat, still paced across the global duration_min window.
+Return ONLY valid JSON:
 {
   "lines": [
     {
-      "at_sec": <int, non-decreasing from 0>,
+      "at_sec": <int, non-decreasing>,
       "speaker_id": "<one id from cast_ids>",
       "action": "send" | "reply",
       "text": "one Telegram message bubble",
@@ -257,41 +68,15 @@ Return only valid JSON:
   ]
 }
 
-Continue from previous_tail. Do not restart or summarize.
-This batch has a NEW HARD BEAT. Switch naturally by saying the new thing,
-without host transitions such as "speaking of", "back to", or "to sum up".
-
-already_said_topics + do_not_reuse_phrases = banned rehash.
-speaker_cards are soft personalities, not fixed NPC jobs.
-Non-leads should open at least half of new threads.
-
-Keep:
-- Exact need_lines
-- One language
-- Mostly 3–8 word phone-chat messages
-- A few 1–2 word bubbles
-- Uneven participation
-- Several same-speaker 2-message bursts
-- At least one 3-message burst when need_lines >= 15
-- Maximum 4 consecutive messages from one speaker
-- About 25–40% of lines inside same-speaker bursts
-- Same-speaker burst gaps usually 0–4 seconds
-- Irregular pauses elsewhere
-- Replies only when answering a specific earlier line
-- About 15–25% replies
-
-When agreeing and adding a thought, prefer two bubbles sometimes:
-A: Me too
-A: Feels steady near here
-
-Do not:
-- Alternate speakers after every line
-- Spread timestamps evenly
-- Put normal same-speaker double-texts 20–60 seconds apart
-- Restart old BTC/ETH/SOL summaries
-- Overuse Same / Not sold / Lol / Ouch / Pain
-- Use cast names inside message text
-- Invent facts not present in LIVE MARKET FACTS
+Technical only:
+- Continue from previous_tail (do not restart the conversation).
+- lines.length must equal need_lines exactly.
+- speaker_id must be one of cast_ids.
+- action/reply_to_line rules same as full plan.
+- TIMELINE: non-decreasing at_sec; use batch.at_sec_window if present;
+  full campaign ends near duration_min*60. Natural bursts + pauses.
+- Keep the same LANGUAGE as previous_tail and LANGUAGE PREFS (do not switch languages mid-chat).
+- If LIVE MARKET FACTS are provided, do not invent prices or headlines not listed there.
 """
 
 
@@ -303,10 +88,8 @@ def _cast_lines(payload: dict[str, Any]) -> list[str]:
             if not isinstance(card, dict):
                 continue
             rows.append(
-                f"- id={card.get('id')} role_hint={card.get('role')} "
-                f"persona={card.get('persona') or 'unique person'} | "
-                f"style={card.get('style')} | tics={card.get('tics')} | "
-                f"avoid={card.get('avoid')}"
+                f"- id={card.get('id')} role={card.get('role')} "
+                f"persona={card.get('persona') or ''}"
             )
         if rows:
             return rows
@@ -315,9 +98,9 @@ def _cast_lines(payload: dict[str, Any]) -> list[str]:
     for item in payload.get("speakers") or []:
         if not isinstance(item, dict):
             continue
-        role = str(item.get("role") or "member").strip().lower()
         rows.append(
-            f"- id={item.get('id')} label={item.get('label')} role={role}"
+            f"- id={item.get('id')} label={item.get('label')} "
+            f"role={str(item.get('role') or 'member').strip().lower()}"
         )
     return rows
 
@@ -325,58 +108,11 @@ def _cast_lines(payload: dict[str, Any]) -> list[str]:
 def _market_section(payload: dict[str, Any]) -> str:
     market_block = str(payload.get("market_brief") or "").strip()
     if not market_block:
-        return (
-            "\n\n=== MARKET CONTEXT ===\n"
-            "No live market facts are available. Keep the chat general. "
-            "Do not invent exact prices, percentages, headlines, laws, ETF flows, "
-            "dates, upgrades, or organization actions.\n"
-            "=== END MARKET CONTEXT ===\n"
-        )
-
+        return ""
     return (
         "\n\n=== LIVE MARKET FACTS ===\n"
         f"{market_block}\n"
-        "This is the only factual ground truth. Use it casually, not as news copy.\n"
-        "PRICE DISCIPLINE: exact levels must stay sparse unless the beat is market_scan.\n"
         "=== END LIVE MARKET FACTS ===\n"
-    )
-
-
-def _beat_section(payload: dict[str, Any]) -> str:
-    block = str(payload.get("beat_block") or "").strip()
-    if not block:
-        beat = payload.get("beat") or {}
-        if isinstance(beat, dict) and beat.get("id"):
-            block = (
-                f"BEAT id={beat.get('id')} primary={beat.get('primary')}\n"
-                f"{beat.get('instruction') or ''}"
-            )
-
-    if not block:
-        return ""
-
-    return (
-        "\n\n=== HARD BEAT FOR THIS BATCH (must dominate) ===\n"
-        f"{block}\n"
-        "=== END HARD BEAT ===\n"
-    )
-
-
-def _language_rule(language: str | None) -> str:
-    lang = (language or "auto").strip().lower()
-    if lang in ("en", "english"):
-        return (
-            "LANGUAGE LOCK: English only. Casual phone English. "
-            "No Vietnamese sentences."
-        )
-    if lang in ("vi", "vietnamese", "vn"):
-        return (
-            "LANGUAGE LOCK: Vietnamese only, with correct Vietnamese diacritics. "
-            "Tickers BTC/ETH/SOL are allowed. No English sentences."
-        )
-    return (
-        "LANGUAGE AUTO: choose one language from the goal and keep it for every "
-        "text field. Do not mix English and Vietnamese."
     )
 
 
@@ -397,31 +133,6 @@ def _cast_ids(payload: dict[str, Any]) -> list[str]:
     return ids
 
 
-def _quality_rubric(target: Any) -> str:
-    return (
-        "\nQUALITY RUBRIC (conversation-level):\n"
-        f"- Count: exactly {target} lines.\n"
-        "- Beat: PRIMARY focus is obvious when skimming the batch.\n"
-        "- Arc: not another majors+news recap with synonyms.\n"
-        "- Anti-host: no meeting-like transitions or summaries.\n"
-        "- Personalities: distinct voices; soft roles, not NPC templates.\n"
-        "- Shape: most messages contain 3–8 words.\n"
-        "- Micro-bubbles: a few natural 1–2 word lines.\n"
-        "- Split thoughts: use separate bubbles for short reaction + main thought.\n"
-        "- Replies: about 15–25%, only when contextually appropriate.\n"
-        "- Speaker bursts: 25–40% of lines inside same-speaker sequences.\n"
-        "- Burst count: several 2-message bursts.\n"
-        "- Triple burst: at least one when target >= 15.\n"
-        "- Burst cap: never more than 4 consecutive lines from one speaker.\n"
-        "- Burst timing: same-speaker messages usually 0–4 seconds apart.\n"
-        "- Overall timing: irregular clusters and pauses, never equal spacing.\n"
-        "- Duration: final line need not land exactly on duration_min.\n"
-        "- Speaker order: reject near-constant alternation.\n"
-        "- Grounding: only facts included in LIVE MARKET FACTS.\n"
-        "- Language: one language; no cast labels inside text.\n"
-    )
-
-
 def _shared_payload(payload: dict[str, Any], *, target_key: str) -> dict[str, Any]:
     cast_ids = _cast_ids(payload)
     return {
@@ -434,147 +145,479 @@ def _shared_payload(payload: dict[str, Any], *, target_key: str) -> dict[str, An
         "cast_ids": cast_ids,
         "speaker_cards": payload.get("speaker_cards") or [],
         "batch": payload.get("batch") or {},
-        "beat": payload.get("beat") or {},
         "topic_bullets": payload.get("topic_bullets") or [],
         "selected_news": payload.get("selected_news") or [],
         "must_discuss_news": payload.get("must_discuss_news") or [],
         "news_keywords": payload.get("news_keywords") or [],
         "previous_tail": payload.get("previous_tail") or [],
-        "already_said_topics": payload.get("already_said_topics") or [],
-        "do_not_reuse_phrases": payload.get("do_not_reuse_phrases") or [],
-        "phase_guidance": payload.get("phase_instructions") or "",
-        "speaker_usage": payload.get("speaker_usage") or {},
-        "branch_hints": payload.get("branch_hints") or [],
-        "anti_host_rule": payload.get("anti_host_rule") or "",
-        "speaker_order_hint": {
-            "avoid": (
-                "mechanical rotation, one-message-per-speaker rhythm, "
-                "long A-B-A-B ping-pong, and equal timestamp intervals"
-            ),
-            "require": (
-                "several same-speaker 2-message bursts; at least one "
-                "3-message burst for batches >= 15 lines; maximum 4 consecutive"
-            ),
-            "target_share": (
-                "about 25-40 percent of lines should be inside consecutive "
-                "same-speaker bursts"
-            ),
-            "timing": (
-                "same-speaker burst gaps usually 0-4 seconds; other gaps "
-                "irregular from a few seconds to over one minute"
-            ),
-        },
     }
 
 
-def validate_chat_rhythm(lines: list[dict[str, Any]]) -> list[str]:
-    """Return human-readable rhythm errors for a generated batch."""
-    errors: list[str] = []
-    if not lines:
-        return ["No lines generated"]
+def _resolve_length_mix(payload: dict[str, Any]) -> tuple[int, int, int]:
+    """Return short/medium/long percentages that sum to ~100."""
+    s = payload.get("message_length_short_pct")
+    m = payload.get("message_length_medium_pct")
+    l = payload.get("message_length_long_pct")
+    if all(isinstance(x, int) for x in (s, m, l)):
+        total = int(s) + int(m) + int(l)  # type: ignore[arg-type]
+        if total > 0:
+            return int(s), int(m), int(l)  # type: ignore[arg-type]
 
-    same_speaker_pairs = 0
-    max_consecutive = 1
-    current_consecutive = 1
-    gaps: list[int] = []
+    preset = str(payload.get("message_length_preset") or "mostly_short").lower()
+    if preset == "mixed":
+        return 50, 40, 10
+    if preset == "detailed":
+        return 30, 50, 20
+    return 70, 25, 5  # mostly_short
 
-    for index, line in enumerate(lines):
-        action = line.get("action")
-        reply_to = line.get("reply_to_line")
 
-        if action == "send" and reply_to is not None:
-            errors.append(f"Line {index + 1}: send must use reply_to_line=null")
-        elif action == "reply":
-            if not isinstance(reply_to, int) or reply_to < 1 or reply_to >= index + 1:
-                errors.append(
-                    f"Line {index + 1}: reply_to_line must point to an earlier line"
-                )
+def _batch_line_count(payload: dict[str, Any]) -> int | None:
+    need = payload.get("target_lines") or payload.get("need_lines")
+    try:
+        n = int(need) if need is not None else None
+    except (TypeError, ValueError):
+        return None
+    return n if n and n > 0 else None
 
-        if index == 0:
-            continue
 
-        previous = lines[index - 1]
-        previous_time = int(previous.get("at_sec", 0))
-        current_time = int(line.get("at_sec", 0))
-        gap = current_time - previous_time
-        gaps.append(gap)
+def _fact_budget_prefs(payload: dict[str, Any]) -> list[str]:
+    """Reaction-first chat when the live fact set is narrow (few coins + news)."""
+    bits: list[str] = []
+    has_market = bool(str(payload.get("market_brief") or "").strip())
+    selected = payload.get("selected_news") or []
+    must = payload.get("must_discuss_news") or []
+    has_news = (
+        (isinstance(selected, list) and len(selected) > 0)
+        or (isinstance(must, list) and len(must) > 0)
+    )
+    if not has_market and not has_news:
+        return bits
 
-        if gap < 0:
-            errors.append(f"Line {index + 1}: at_sec decreased")
+    intensity = str(payload.get("market_intensity") or "medium").lower()
+    if intensity == "low":
+        fact_pct, react_pct = 22, 78
+    elif intensity == "high":
+        fact_pct, react_pct = 42, 58
+    else:
+        fact_pct, react_pct = 30, 70
 
-        if line.get("speaker_id") == previous.get("speaker_id"):
-            same_speaker_pairs += 1
-            current_consecutive += 1
-            max_consecutive = max(max_consecutive, current_consecutive)
-            if gap > 8:
-                errors.append(
-                    f"Lines {index}–{index + 1}: same-speaker gap is too long ({gap}s)"
-                )
+    n_lines = _batch_line_count(payload) or 40
+    # Per major coin: ~8% of batch, clamp 2..4 for typical 30–50 line batches
+    coin_cap = max(2, min(4, int(round(n_lines * 0.08)) or 2))
+    movers_cap = 2 if n_lines >= 30 else 1
+    must_cap = 2
+    news_cap = 1
+
+    bits.append(
+        f"FACT vs REACTION MIX (narrow fact set is normal — do NOT invent more data): "
+        f"~{fact_pct}% of lines may TOUCH a live fact (price vibe, % mover, or news paraphrase). "
+        f"~{react_pct}% of lines must be pure REACTION with no new number and no re-stated headline — "
+        f"feeling, expectation, strategy, joke, question, bag talk, wait-for-catalyst. "
+        f"People discuss more than they re-announce the same print."
+    )
+    bits.append(
+        f"FACT BUDGET (hard caps for this batch of ~{n_lines} lines): "
+        f"BTC price/level wording ≤ {coin_cap} times; "
+        f"ETH ≤ {coin_cap}; SOL ≤ {coin_cap}; "
+        f"exact mover % mentions ≤ {movers_cap} total; "
+        f"each selected news theme ≤ {news_cap} paraphrase"
+        + (f"; must_discuss themes ≤ {must_cap} each" if must else "")
+        + ". "
+        "After a fact hits its cap, later mentions of that coin/news = reaction only "
+        "(no restating the same number or 'still near Xk')."
+    )
+    bits.append(
+        "ANGLE DIVERSITY (same topic OK, same wording FORBIDDEN): "
+        "If the room is still about BTC, rotate angles — chart feel, volume dead, "
+        "wait for US open / big news, 'thought we'd break', bag hold, FOMO/regret, "
+        "ask someone else — NOT a chain of 'BTC still ~64k / sideway / chưa break / quanh 64k'. "
+        "Example good stretch: "
+        "'chart hôm nay buồn ngủ' → 'chưa chịu thoát vùng' → 'chờ tin lớn' → "
+        "'tưởng sáng nay break' → 'volume im' → 'đợi Mỹ mở cửa' "
+        "(topic BTC, zero repeated price print)."
+    )
+    bits.append(
+        "FORBIDDEN fact loops: three or more lines that only rephrase the same price level "
+        "or the same headline. Prefer short reactions after the first clear fact drop."
+    )
+
+    previous_tail = payload.get("previous_tail") or []
+    if isinstance(previous_tail, list) and len(previous_tail) > 0:
+        bits.append(
+            "CONTINUATION FACT MEMORY: previous_tail already spent some fact mentions. "
+            "Do NOT restart with the same BTC/ETH/SOL price wording from the tail. "
+            "Advance angles; only spend remaining fact budget on a NEW angle or unspent news."
+        )
+    return bits
+
+
+def _language_prefs(payload: dict[str, Any]) -> list[str]:
+    """Hard language lock — language was only in JSON before and models often ignored it."""
+    raw = str(payload.get("language") or "auto").strip().lower()
+    if raw in {"", "auto"}:
+        return [
+            "LANGUAGE: follow the goal language; if goal mixes languages, pick the dominant one "
+            "and stay consistent for all lines.text."
+        ]
+    if raw in {"en", "english", "eng"}:
+        return [
+            "LANGUAGE (HARD RULE): Write EVERY lines[].text in English only. "
+            "FORBIDDEN: Vietnamese words, Vietnamese diacritics, or code-switching "
+            "(no 'thôi', 'đúng', 'vẫn', 'quanh', 'chờ', etc.). "
+            "Tickers (BTC/ETH/SOL) and numbers are fine. "
+            "User goal may mention Language: English — obey that over any Vietnamese samples."
+        ]
+    if raw in {"vi", "vn", "vietnamese", "tieng viet", "tiếng việt"}:
+        return [
+            "LANGUAGE (HARD RULE): Write EVERY lines[].text in Vietnamese only "
+            "(natural chat, diacritics OK). "
+            "FORBIDDEN: full English sentences or English-only bubbles "
+            "(loanwords like BTC, ETH, ok, lol are fine)."
+        ]
+    if raw in {"bilingual", "mix", "mixed", "vi+en", "en+vi", "vi_en"}:
+        return [
+            "LANGUAGE (HARD RULE): Bilingual Vietnamese + English chat is allowed. "
+            "Mix naturally per speaker (some VI, some EN, or short code-switch). "
+            "Do NOT force every line into one language."
+        ]
+    return [
+        f"LANGUAGE (HARD RULE): Write all lines[].text in language code «{raw}». "
+        "Do not switch away from that language."
+    ]
+
+
+def _generation_prefs(payload: dict[str, Any]) -> str:
+    bits: list[str] = []
+    bits.extend(_language_prefs(payload))
+    bits.extend(_fact_budget_prefs(payload))
+
+    # Explicit Telegram reply share (UI slider) — was missing from prefs before
+    reply_rate = payload.get("reply_rate")
+    n_lines = _batch_line_count(payload)
+    try:
+        rr = float(reply_rate) if reply_rate is not None else None
+    except (TypeError, ValueError):
+        rr = None
+    if rr is not None and 0 < rr <= 1:
+        pct = int(round(rr * 100))
+        if n_lines is not None and n_lines >= 2:
+            target_replies = max(1, min(n_lines - 1, int(round(n_lines * rr))))
+            lo = max(1, target_replies - 1)
+            hi = min(n_lines - 1, target_replies + 1)
+            bits.append(
+                f"TELEGRAM REPLY RATE: about {pct}% of lines must use action=\"reply\" "
+                f"(target ~{target_replies} replies in this batch of {n_lines}, "
+                f"acceptable {lo}–{hi}). "
+                f"Each reply sets reply_to_line to an earlier 1-based line in THIS batch "
+                f"(often the previous message or a recent question). "
+                f"Remaining lines use action=\"send\" with reply_to_line=null. "
+                f"FORBIDDEN: almost all send with zero replies when rate is {pct}%."
+            )
         else:
-            current_consecutive = 1
+            bits.append(
+                f"TELEGRAM REPLY RATE: about {pct}% of lines must use action=\"reply\" "
+                f"with reply_to_line pointing to an earlier line; rest are send."
+            )
 
-    minimum_pairs = max(2, len(lines) // 6)
-    if same_speaker_pairs < minimum_pairs:
-        errors.append(
-            "Too few same-speaker consecutive pairs: "
-            f"{same_speaker_pairs}, expected at least {minimum_pairs}"
+    numeric = str(payload.get("numeric_detail") or "approx").lower()
+    if numeric == "none":
+        bits.append("No exact prices or percents — vibes only (chilling, pumped, weak).")
+    elif numeric == "exact":
+        bits.append("When citing a figure, copy LIVE MARKET FACTS exactly.")
+    else:
+        bits.append(
+            "Prefer approximate only (near 64k, up a lot). "
+            "Do not invent alternate percentages for movers."
         )
 
-    if len(lines) >= 15 and max_consecutive < 3:
-        errors.append("No 3-message same-speaker burst found")
+    short_p, med_p, long_p = _resolve_length_mix(payload)
+    bits.append(
+        f"MESSAGE LENGTH MIX (by line count, not characters): "
+        f"~{short_p}% SHORT (1–8 words, fragments OK), "
+        f"~{med_p}% MEDIUM (9–16 words), "
+        f"~{long_p}% LONG (17–28 words max). "
+        "Do NOT make almost every line medium/complete sentences. "
+        "Many lines should be just a few words (BTC chill / yeah / sol weak tho)."
+    )
 
-    if max_consecutive > 4:
-        errors.append("More than 4 consecutive messages from one speaker")
+    style = str(payload.get("chat_style") or "messy").lower()
+    allow_typos = bool(payload.get("allow_typos", False))
+    allow_acks = bool(payload.get("allow_acks", True))
+    allow_filler = bool(payload.get("allow_filler", False))
 
-    if len(gaps) >= 6:
-        rounded = [round(gap / 2) * 2 for gap in gaps]
-        most_common_count = max(rounded.count(value) for value in set(rounded))
-        if most_common_count / len(rounded) >= 0.6:
-            errors.append("Message timing looks evenly distributed")
+    if style == "clean":
+        bits.append(
+            "CHAT STYLE clean: short Telegram bubbles, mostly correct grammar."
+        )
+    elif style == "casual":
+        bits.append(
+            "CHAT STYLE casual: phone chat, fragments ok (tho, tbh, lol). "
+            "Not every line is a full subject-verb sentence."
+        )
+    elif style == "degen":
+        bits.append(
+            "CHAT STYLE degen: crypto-group energy — lmao, ngmi, send it, bro. "
+            "Very short, still readable."
+        )
+    else:
+        bits.append(
+            "CHAT STYLE messy: real Telegram — incomplete thoughts, short reactions, "
+            "not polished host sentences."
+        )
 
-    return errors
+    # Split intensity: prefer continuous %; fall back to legacy enum
+    split_pct_raw = payload.get("split_continue_pct")
+    split_pct: int | None = None
+    try:
+        if split_pct_raw is not None:
+            split_pct = max(0, min(100, int(split_pct_raw)))
+    except (TypeError, ValueError):
+        split_pct = None
+    if split_pct is None:
+        legacy = str(payload.get("split_bubbles") or "often").lower()
+        split_pct = {"off": 0, "sometimes": 25, "often": 65}.get(legacy, 65)
+
+    # Resolve max consecutive early — split prefs must respect this hard cap
+    max_c = payload.get("max_consecutive_same_speaker")
+    try:
+        max_c_i = max(1, min(5, int(max_c))) if max_c is not None else 3
+    except (TypeError, ValueError):
+        max_c_i = 3
+
+    # Core Telegram habit: short bubble then continue from SAME speaker
+    if split_pct <= 15:
+        bits.append(
+            f"SPLIT BUBBLES ~{split_pct}% (LOW): almost no multi-bubble monologues. "
+            "Prefer one complete bubble per turn, then SWITCH speaker. "
+            "At most a rare double (ok → short take) — roughly 1 double per ~10 lines. "
+            f"HARD: never more than {max_c_i} lines in a row from the same speaker_id. "
+            "FORBIDDEN: open with 3–4 scene-setting lines from the same person "
+            "(Morning / chart / BTC / news as one monologue)."
+        )
+    elif split_pct <= 40:
+        bits.append(
+            f"SPLIT BUBBLES ~{split_pct}%: about that share of adjacent pairs may be "
+            "the SAME speaker continuing (short opener → real take). "
+            "Example: 'ok' then 'BTC still chill near here'. "
+            f"HARD CAP: max {max_c_i} consecutive lines from one speaker_id "
+            "(a double/triple counts toward this). "
+            "Do NOT pack both into one long message."
+        )
+    else:
+        bits.append(
+            f"SPLIT BUBBLES ~{split_pct}% (Telegram multi-bubble habit): "
+            "many thoughts are 2 bubbles from the SAME speaker_id back-to-back. "
+            "First bubble = tiny (ok / wait / yeah / true / lol / hmm) OR a short fragment. "
+            "Second bubble = the actual point (i love this market / sol looks weak tho). "
+            f"Target about {split_pct}% of adjacent pairs as same-speaker continues, "
+            f"but NEVER exceed {max_c_i} consecutive lines from one speaker_id. "
+            "FORBIDDEN: always one complete polished sentence per person then switch."
+        )
+
+    if allow_acks and style != "clean" and split_pct > 15:
+        bits.append(
+            "ACK / OPENER bubbles: pure short lines (ok, yeah, true, same, wait, lmao, idk) "
+            "are valid as the FIRST half of a split — then continue on the next line."
+        )
+    if allow_typos:
+        bits.append(
+            "TYPOS optional: rare light typos only; never typo tickers or numbers."
+        )
+    if allow_filler:
+        bits.append(
+            "FILLER: rare playful one-liners only if they still fit the chat energy."
+        )
+
+    max_news = payload.get("max_news_topics")
+    if isinstance(max_news, int) and max_news >= 0:
+        bits.append(f"Use at most {max_news} news themes in this batch.")
+
+    openers = payload.get("opening_speaker_ids") or []
+    if openers:
+        bits.append(
+            f"If this is the first batch, first line speaker_id must be one of {openers}."
+        )
+
+    # Opening quality: only for first batch (no previous_tail). Ending stays loose.
+    previous_tail = payload.get("previous_tail") or []
+    is_first_batch = not (
+        isinstance(previous_tail, list) and len(previous_tail) > 0
+    )
+    if is_first_batch:
+        lang = str(payload.get("language") or "auto").strip().lower()
+        if lang in {"en", "english", "eng"}:
+            if split_pct <= 15:
+                open_examples = (
+                    "Examples (English, low-split — pick ONE style, not a template): "
+                    "a: 'chart is dead today' → b: 'btc just sitting'; "
+                    "or a: 'anyone still in sol' → b: 'bag stuck lol'; "
+                    "or a: 'eth volume trash' → b: 'waiting on a catalyst'"
+                )
+            else:
+                open_examples = (
+                    "Examples (English): a: 'chart is dead today' → a: 'no real moves' "
+                    "(only if split allows) → b: 'eth looking better tho?'"
+                )
+        elif lang in {"bilingual", "mix", "mixed", "vi+en", "en+vi", "vi_en"}:
+            open_examples = (
+                "Examples (mix OK): jump into chart/bag talk — not a formal greeting round."
+            )
+        else:
+            if split_pct <= 15:
+                open_examples = (
+                    "Examples (VI, low-split — đổi style mỗi plan): "
+                    "a: 'chart im quá' → b: 'btc quanh đây thoi'; "
+                    "hoặc a: 'ai còn hold sol' → b: 'mình kẹt từ dip'; "
+                    "hoặc a: 'eth volume yếu' → b: 'chờ catalyst'"
+                )
+            else:
+                open_examples = (
+                    "Examples (VI): a: 'chart im quá' → a: 'chưa break' (nếu split cho phép) "
+                    "→ b: 'eth hôm nay sao'"
+                )
+        open_max = min(max_c_i, 2 if split_pct <= 15 else max_c_i)
+        bits.append(
+            "OPENING (first batch — real start; ending may trail off): "
+            f"First {min(4, max(2, open_max + 1))} lines set the room WITHOUT one person monologuing. "
+            f"HARD: opening run from one speaker_id ≤ {open_max} lines "
+            f"(global max consecutive is {max_c_i}; low split ⇒ keep open short). "
+            "Jump into chart / bag / coin talk — group already 'online', no formal greeting. "
+            f"{open_examples}. "
+            "FORBIDDEN first-line openers (overused templates): "
+            "'Morning', 'Morning all', 'Good morning', 'GM', 'Gm everyone', "
+            "'Chào buổi sáng', 'Sáng nay ae', 'Hello everyone', 'Hi all'. "
+            "Do NOT start every plan with a time-of-day greeting. "
+            "FORBIDDEN: four lines in a row from the lead (greeting + chart + BTC + news). "
+            "FORBIDDEN: bare pure-ack only as the whole open. "
+            "Opening must obey LANGUAGE hard rule above."
+        )
+
+    order = str(payload.get("speaker_order") or "natural").lower()
+
+    bits.append(
+        f"MAX CONSECUTIVE SAME SPEAKER (HARD CAP): never more than {max_c_i} "
+        f"back-to-back lines with the same speaker_id anywhere in this batch "
+        f"(including opening and splits). A 4th consecutive line from the same person is FORBIDDEN."
+    )
+
+    if order == "rotate":
+        bits.append(
+            "SPEAKER ORDER: rotate fairly between cast_ids (A-B-C-D-A-B…). "
+            "Almost never send two lines in a row from the same speaker "
+            f"(still hard-capped at {max_c_i})."
+        )
+    elif order == "messy":
+        bits.append(
+            "SPEAKER ORDER: messy, uneven. Pattern like a a · c · b b b · d · a. "
+            f"Doubles/triples OK but never exceed {max_c_i} consecutive. "
+            "FORBIDDEN: strict round-robin A-B-C-D-A-B-C-D."
+        )
+    elif order == "lead_heavy":
+        bits.append(
+            "SPEAKER ORDER: lead may speak more and take short doubles. "
+            f"Others still appear. Consecutive same speaker ≤ {max_c_i}. "
+            "FORBIDDEN: perfect rotation A-B-C-D each cycle."
+        )
+    else:
+        # natural — allow doubles but respect hard max (do not force high same-speaker rate when max is low)
+        if max_c_i <= 1:
+            same_pair_hint = "Almost no same-speaker adjacent pairs."
+        elif max_c_i == 2:
+            same_pair_hint = (
+                "Some doubles OK (~15–25% adjacent same speaker); no triples."
+            )
+        else:
+            same_pair_hint = (
+                f"About 20–35% adjacent pairs may be same speaker; max run {max_c_i}."
+            )
+        bits.append(
+            "SPEAKER ORDER: natural Telegram group, NOT strict round-robin. "
+            f"{same_pair_hint} "
+            f"HARD CAP {max_c_i} consecutive. "
+            "FORBIDDEN: lead monologue of 4+ scene lines at the start. "
+            "FORBIDDEN patterns: strict A-B-C-D-A-B-C-D panel cycling only."
+        )
+
+    bits.append(
+        "Match each speaker_card style (short vs detailed, slang, questions). "
+        "Avoid host transitions: Switching gears / Back to markets / Overall / To summarize."
+    )
+    return "\n".join(f"- {b}" for b in bits)
+
+
+def _task_block(payload: dict[str, Any], *, lines_key: str) -> str:
+    """Clear mission line: crypto chat + distribute over user duration input."""
+    try:
+        mins = int(payload.get("duration_min") or 20)
+    except (TypeError, ValueError):
+        mins = 20
+    mins = max(5, mins)
+    span = mins * 60
+    try:
+        n_lines = int(payload.get(lines_key) or payload.get("target_lines") or 0)
+    except (TypeError, ValueError):
+        n_lines = 0
+    batch = payload.get("batch") if isinstance(payload.get("batch"), dict) else {}
+    window = batch.get("at_sec_window") if isinstance(batch, dict) else None
+
+    lines_bit = f"{n_lines} messages" if n_lines > 0 else "the requested number of messages"
+    task = (
+        f"TASK: Write a natural multi-account Telegram chat about today's crypto market "
+        f"({lines_bit}). Distribute messages reasonably across the user duration input "
+        f"duration_min={mins} minutes (at_sec 0 → ~{span}). "
+        f"Return only the JSON script."
+    )
+    if isinstance(window, dict) and window.get("start") is not None:
+        task += (
+            f" This batch only covers at_sec {window.get('start')}–{window.get('end')} "
+            f"(global end {window.get('global_end', span)})."
+        )
+    return task
 
 
 def build_user_prompt(payload: dict[str, Any]) -> str:
     target = payload.get("target_lines")
-    language = payload.get("language") or "auto"
     body = _shared_payload(payload, target_key="target_lines")
-    retry = ""
-    if payload.get("instruction_retry"):
-        retry = f"\n\nRETRY NOTE:\n{payload['instruction_retry']}\n"
-    long_note = str(payload.get("long_plan_note") or "").strip()
+    goal = str(payload.get("goal") or "").strip()
+    goal_block = f"GOAL (from user):\n{goal}\n\n" if goal else ""
+    prefs = _generation_prefs(payload)
+    lang = str(payload.get("language") or "auto").strip()
+    mins = int(body.get("duration_min") or 20)
+    span = mins * 60
+    task = _task_block(payload, lines_key="target_lines")
 
     return (
-        "Write this campaign chat batch as JSON only.\n"
-        "Obey the HARD BEAT: this batch must read as that focus, not a majors loop.\n\n"
-        f"{_language_rule(str(language))}\n\n"
-        + (f"{long_note}\n\n" if long_note else "")
-        + f"{json.dumps(body, ensure_ascii=False, indent=2)}\n"
-        f"{_beat_section(payload)}"
+        f"{task}\n\n"
+        f"{goal_block}"
+        f"PREFS:\n{prefs}\n\n"
+        f"{json.dumps(body, ensure_ascii=False, indent=2)}\n"
         f"{_market_section(payload)}"
-        f"{retry}"
-        f"{_quality_rubric(target)}"
-        f"\nREQUIRED JSON: lines.length === {target}.\n"
+        f"\nREQUIRED JSON: lines.length === {target}. "
+        f"duration_min === {mins}. "
+        f"All text in language={lang}. "
+        f"last line at_sec ≈ {span}.\n"
     )
 
 
 def build_continuation_prompt(payload: dict[str, Any]) -> str:
     need = payload.get("target_lines")
-    language = payload.get("language") or "auto"
     body = _shared_payload(payload, target_key="need_lines")
     body["need_lines"] = need
-    retry = ""
-    if payload.get("instruction_retry"):
-        retry = f"\n\nRETRY NOTE:\n{payload['instruction_retry']}\n"
+    goal = str(payload.get("goal") or "").strip()
+    goal_block = f"GOAL (from user):\n{goal}\n\n" if goal else ""
+    prefs = _generation_prefs(payload)
+    lang = str(payload.get("language") or "auto").strip()
+    mins = int(body.get("duration_min") or 20)
+    span = mins * 60
+    task = _task_block(payload, lines_key="need_lines")
 
     return (
-        "Continue the campaign chat as JSON only.\n"
-        "The NEW HARD BEAT must progress the conversation without rehashing old topics.\n\n"
-        f"{_language_rule(str(language))}\n\n"
+        f"{task}\n\n"
+        f"{goal_block}"
+        f"PREFS:\n{prefs}\n\n"
         f"{json.dumps(body, ensure_ascii=False, indent=2)}\n"
-        f"{_beat_section(payload)}"
         f"{_market_section(payload)}"
-        f"{retry}"
-        f"{_quality_rubric(need)}"
-        f"\nREQUIRED JSON: lines.length === {need}.\n"
+        f"\nREQUIRED JSON: lines.length === {need}. "
+        f"All text in language={lang}. "
+        f"Global duration_min={mins} (campaign ends near {span}s).\n"
     )

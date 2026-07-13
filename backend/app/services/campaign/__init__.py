@@ -1,6 +1,6 @@
 """AI campaign planning + job orchestration for Hội thoại UI.
 
-- ``planner`` / ``normalize`` / ``inject`` / ``goal_draft`` — building blocks
+- ``planner`` / ``normalize`` / ``prompts`` — plan build
 - ``workflow`` — product orchestration used by ``/api/campaign/*``
 - Runtime execution: ``services.campaign.execution``
 """

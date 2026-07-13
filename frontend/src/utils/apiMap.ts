@@ -168,12 +168,6 @@ export const apiMap: ApiMapGroup[] = [
       { method: 'POST', path: '/api/campaign/jobs', page: '/conversation' },
       { method: 'GET', path: '/api/campaign/jobs/{job_id}', page: '/conversation' },
       { method: 'POST', path: '/api/campaign/jobs/{job_id}/stop', page: '/conversation' },
-      { method: 'POST', path: '/api/campaign/jobs/{job_id}/resume', page: '/conversation' },
-      {
-        method: 'POST',
-        path: '/api/campaign/jobs/{job_id}/lines/{line_id}/retry',
-        page: '/conversation',
-      },
     ],
   },
 ]

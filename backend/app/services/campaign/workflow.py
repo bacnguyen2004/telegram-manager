@@ -10,10 +10,6 @@ from __future__ import annotations
 from ...db import metadata_store
 from ...schemas.campaign import (
     MAX_CAMPAIGN_LINES,
-    CampaignGoalDraftData,
-    CampaignGoalDraftRequest,
-    CampaignInjectData,
-    CampaignInjectRequest,
     CampaignJobCreateData,
     CampaignJobCreateRequest,
     CampaignJobData,
@@ -23,8 +19,6 @@ from ...schemas.campaign import (
     CampaignValidationIssue,
 )
 from .execution import campaign_runner, campaign_job_store
-from .goal_draft import build_goal_draft
-from .inject import inject_into_job
 from .normalize import plan_to_script, validate_campaign_script
 from .planner import plan_campaign
 
@@ -194,10 +188,6 @@ class CampaignWorkflow:
                 filter_tags=tag_list,
             )
 
-    def goal_draft(self, payload: CampaignGoalDraftRequest) -> CampaignGoalDraftData:
-        goal = build_goal_draft(payload)
-        return CampaignGoalDraftData(goal=goal, source="template")
-
     def start_job(self, payload: CampaignJobCreateRequest) -> CampaignJobCreateData:
         if not payload.group_link.strip():
             raise CampaignBadRequestError("Thieu link nhom")
@@ -259,95 +249,25 @@ class CampaignWorkflow:
         return campaign_job_store.to_data(refreshed)  # type: ignore[arg-type]
 
     def resume_job(self, job_id: int) -> CampaignJobData:
+        """Continue a stopped/error/pending job from remaining lines."""
         job = campaign_job_store.get(job_id)
         if job is None:
             raise CampaignNotFoundError("Khong tim thay job")
-        if job.status == "running" or campaign_runner.is_active(job_id):
+        if job.status == "running":
             raise CampaignConflictError("Job dang chay")
-        if job.status not in ("stopped", "done", "error", "pending"):
-            raise CampaignBadRequestError(
-                f"Khong the resume job status={job.status}"
-            )
-
-        results = campaign_job_store.get_line_results(job_id)
-        remaining = [
-            item for item in results if item.status not in ("success", "skipped")
-        ]
-        if not remaining and job.status == "done":
-            raise CampaignBadRequestError(
-                "Job da gui het cac dong — khong con gi de tiep tuc"
-            )
+        if job.status == "done":
+            raise CampaignBadRequestError("Job da xong — khong con tin de tiep tuc")
 
         started = campaign_runner.resume(job_id)
         if not started:
-            raise CampaignConflictError("Khong the resume job")
-
-        _audit(
-            "campaign",
-            action="campaign.resume",
-            resource=str(job_id),
-            status="success",
-            detail={
-                "job_id": job_id,
-                "remaining": len(remaining),
-                "prev_status": job.status,
-            },
-        )
+            raise CampaignBadRequestError(
+                "Khong resume duoc — khong con tin pending/error, hoac job dang chay"
+            )
 
         refreshed = campaign_job_store.get(job_id)
-        return campaign_job_store.to_data(refreshed)  # type: ignore[arg-type]
-
-    def retry_line(self, job_id: int, line_id: int) -> CampaignJobData:
-        job = campaign_job_store.get(job_id)
-        if job is None:
-            raise CampaignNotFoundError("Khong tim thay job")
-        if job.status == "running" or campaign_runner.is_active(job_id):
-            raise CampaignConflictError("Job dang chay — dung truoc khi retry")
-
-        script = campaign_job_store.load_script(job)
-        line_ids = {line.id for line in script.lines}
-        if line_id not in line_ids:
-            raise CampaignNotFoundError(f"Khong tim thay dong #{line_id}")
-
-        started = campaign_runner.retry_line(job_id, line_id)
-        if not started:
-            raise CampaignConflictError("Khong the retry dong nay")
-
-        _audit(
-            "campaign",
-            action="campaign.retry_line",
-            resource=str(job_id),
-            status="success",
-            detail={"job_id": job_id, "line_id": line_id},
-        )
-
-        refreshed = campaign_job_store.get(job_id)
-        return campaign_job_store.to_data(refreshed)  # type: ignore[arg-type]
-
-    async def inject(
-        self, job_id: int, payload: CampaignInjectRequest
-    ) -> CampaignInjectData:
-        try:
-            result = await inject_into_job(job_id, payload)
-        except LookupError as exc:
-            raise CampaignNotFoundError(str(exc)) from exc
-        except ValueError as exc:
-            raise CampaignBadRequestError(str(exc)) from exc
-        except Exception as exc:
-            raise CampaignUpstreamError(f"Inject that bai: {exc}") from exc
-
-        _audit(
-            "campaign",
-            action="campaign.inject",
-            resource=str(job_id),
-            status="success",
-            detail={
-                "job_id": job_id,
-                "injected": result.get("injected_count"),
-                "total": result.get("new_total_lines"),
-            },
-        )
-        return CampaignInjectData(**result)
+        if refreshed is None:
+            raise CampaignNotFoundError("Khong tim thay job sau resume")
+        return campaign_job_store.to_data(refreshed)
 
 
 campaign_workflow = CampaignWorkflow()

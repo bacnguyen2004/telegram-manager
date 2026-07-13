@@ -38,6 +38,45 @@ NEWS_TAG_KEYWORDS: dict[str, tuple[str, ...]] = {
     "btc": ("bitcoin", "btc", "satoshi", "ordinals", "lightning network"),
     "eth": ("ethereum", "eth ", " ether", "vitalik", "eip-", "layer-2", "l2 ", "rollup"),
     "sol": ("solana", "sol ", "phantom wallet"),
+    "alt": (
+        "bnb",
+        "binance coin",
+        "xrp",
+        "ripple",
+        "doge",
+        "dogecoin",
+        "ada",
+        "cardano",
+        "avax",
+        "avalanche",
+        "link",
+        "chainlink",
+        "dot",
+        "polkadot",
+        "ton",
+        "toncoin",
+        "trx",
+        "tron",
+        "matic",
+        "polygon",
+        " pol ",
+        "near protocol",
+        "aptos",
+        "sui ",
+        "arbitrum",
+        "optimism",
+        "pepe",
+        "shiba",
+        "shib ",
+        "uniswap",
+        "litecoin",
+        " ltc",
+        "bitcoin cash",
+        " bch",
+        "altcoin",
+        "meme coin",
+        "memecoin",
+    ),
     "etf": ("etf", "exchange-traded", "spot etf", "blackrock", "ishares"),
     "regulation": (
         "sec ",
@@ -215,7 +254,7 @@ def _fetch_feed_sync(source: str, url: str) -> list[tuple[datetime | None, NewsI
         method="GET",
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, timeout=25) as resp:
             raw = resp.read()
     except urllib.error.HTTPError as exc:
         logger.warning("RSS %s HTTP %s", source, exc.code)

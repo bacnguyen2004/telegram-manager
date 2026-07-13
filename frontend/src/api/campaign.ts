@@ -1,9 +1,5 @@
 import type {
   CampaignAiStatusData,
-  CampaignGoalDraftData,
-  CampaignGoalDraftPayload,
-  CampaignInjectData,
-  CampaignInjectPayload,
   CampaignJobCreateData,
   CampaignJobCreatePayload,
   CampaignMarketContext,
@@ -34,13 +30,6 @@ export const campaignApi = {
     })
   },
 
-  goalDraft(payload: CampaignGoalDraftPayload) {
-    return request<CampaignGoalDraftData>('/campaign/goal-draft', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    })
-  },
-
   startCampaignJob(payload: CampaignJobCreatePayload) {
     return request<CampaignJobCreateData>('/campaign/jobs', {
       method: 'POST',
@@ -61,20 +50,6 @@ export const campaignApi = {
   resumeCampaignJob(jobId: number) {
     return request<ConversationJobData>(`/campaign/jobs/${jobId}/resume`, {
       method: 'POST',
-    })
-  },
-
-  retryCampaignLine(jobId: number, lineId: number) {
-    return request<ConversationJobData>(
-      `/campaign/jobs/${jobId}/lines/${lineId}/retry`,
-      { method: 'POST' },
-    )
-  },
-
-  injectCampaignJob(jobId: number, payload: CampaignInjectPayload) {
-    return request<CampaignInjectData>(`/campaign/jobs/${jobId}/inject`, {
-      method: 'POST',
-      body: JSON.stringify(payload),
     })
   },
 }

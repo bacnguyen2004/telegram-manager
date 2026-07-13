@@ -226,6 +226,104 @@
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  /* Stable row height for virtualization */
+  contain: layout style;
+}
+
+.acc-picker-panel--embedded {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  height: auto;
+  max-height: none;
+  min-height: 320px;
+}
+
+.acc-picker-panel--embedded .acc-picker-head--embedded {
+  padding: 0 0 10px;
+  border-bottom: none;
+}
+
+.acc-picker-panel--embedded .acc-picker-head--embedded h2 {
+  font-size: 0.98rem;
+}
+
+.acc-picker-panel--embedded .acc-picker-body {
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 14px;
+  background: var(--bg);
+  overflow: hidden;
+  min-height: 280px;
+}
+
+.acc-picker-panel--embedded .acc-picker-list {
+  max-height: 360px;
+  min-height: 220px;
+}
+
+.acc-picker-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  padding: 0 2px;
+}
+
+.acc-picker-stats strong {
+  color: var(--text-strong);
+  font-weight: 800;
+}
+
+.acc-picker-stats-cap {
+  color: color-mix(in srgb, var(--accent, #7c3aed) 80%, var(--text-muted));
+  font-weight: 750;
+}
+
+.acc-picker-selected-only {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.acc-picker-selected-only input {
+  accent-color: var(--accent, #7c3aed);
+}
+
+.acc-picker-row-fixed {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acc-picker-row-fixed .acc-picker-item {
+  height: 100%;
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
+.acc-picker-spacer {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  pointer-events: none;
+}
+
+.acc-picker-item--locked {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .acc-picker-item {

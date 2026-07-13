@@ -11,10 +11,20 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class CampaignSpeakerInput(BaseModel):
+    """Cast member. ``phone`` is for executor only — stripped before LLM prompts."""
+
     id: str = Field(..., min_length=1, max_length=32)
     label: str = Field(default="", max_length=80)
     phone: str = Field(..., min_length=3, max_length=32)
     role: str = Field(default="member", max_length=32)
+    # Rich persona from UI (optional; soft priors for planner)
+    activity: str | None = Field(default=None, max_length=16)
+    message_style: str | None = Field(default=None, max_length=16)
+    sentiment: str | None = Field(default=None, max_length=16)
+    knowledge_level: str | None = Field(default=None, max_length=16)
+    preferred_assets: list[str] = Field(default_factory=list, max_length=8)
+    can_open: bool | None = None
+    emoji_habit: str | None = Field(default=None, max_length=40)
 
 
 # Keep in sync with frontend campaignTiming.MAX_TARGET_LINES
@@ -63,6 +73,78 @@ class CampaignPlanRequest(BaseModel):
         default=None,
         max_length=80,
         description="OpenAI model override (empty = OPENAI_MODEL default)",
+    )
+    reply_rate: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Target share of reply lines; converted to min/max count for planner",
+    )
+    timing_pattern: Literal["even", "natural_bursts", "slow_group", "fast_chat"] | None = Field(
+        default=None,
+        description="Deprecated — ignored. AI owns at_sec from the plan prompt.",
+    )
+    market_intensity: Literal["low", "medium", "high"] = Field(
+        default="medium",
+        description="How heavily market facts should appear in chat",
+    )
+    numeric_detail: Literal["none", "approx", "exact"] = Field(
+        default="approx",
+        description="Prefer no numbers / approximate / exact snapshot figures",
+    )
+    max_news_topics: int = Field(default=2, ge=0, le=12)
+    message_length_preset: Literal["mostly_short", "mixed", "detailed"] = Field(
+        default="mostly_short",
+        description="Target length mix: mostly_short 70/25/5, mixed 50/40/10, detailed 30/50/20",
+    )
+    message_length_short_pct: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="Optional override short % (with medium/long)",
+    )
+    message_length_medium_pct: int | None = Field(default=None, ge=0, le=100)
+    message_length_long_pct: int | None = Field(default=None, ge=0, le=100)
+    speaker_order: Literal["natural", "rotate", "messy", "lead_heavy"] = Field(
+        default="natural",
+        description="Speaker sequence: natural allows a b b c d d d a; rotate is strict A-B-C-D",
+    )
+    max_consecutive_same_speaker: int = Field(
+        default=3,
+        ge=1,
+        le=5,
+        description="Max back-to-back lines from one speaker (ignored when speaker_order=rotate → 1)",
+    )
+    chat_style: Literal["clean", "casual", "messy", "degen"] = Field(
+        default="messy",
+        description="Speech naturalness: clean vs casual phone chat",
+    )
+    allow_typos: bool = Field(
+        default=False,
+        description="Allow light typos (optional; not the main naturalness lever)",
+    )
+    allow_acks: bool = Field(
+        default=True,
+        description="Allow pure ack bubbles: ok, yeah, true, lmao",
+    )
+    allow_filler: bool = Field(
+        default=False,
+        description="Allow sparse playful filler (optional)",
+    )
+    split_bubbles: Literal["off", "sometimes", "often"] = Field(
+        default="often",
+        description=(
+            "Legacy enum for multi-bubble intensity. Prefer split_continue_pct when set."
+        ),
+    )
+    split_continue_pct: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description=(
+            "Share of adjacent same-speaker continues (0=no split, ~65=often Telegram habit). "
+            "When set, planner prefs use this instead of split_bubbles enum."
+        ),
     )
 
 
@@ -119,41 +201,6 @@ class CampaignMarketContext(BaseModel):
     error: str | None = None
     filter_q: str = ""
     filter_tags: list[str] = Field(default_factory=list)
-
-
-class CampaignGoalDraftRequest(BaseModel):
-    topic: Literal["btc_eth", "alts", "macro", "mix"] = "btc_eth"
-    tone: Literal["casual", "debate", "hype", "skeptical"] = "casual"
-    conflict: Literal["none", "low", "medium"] = "low"
-    language: str = Field(default="auto", max_length=32)
-    message_length: Literal["short", "medium"] = "short"
-    selected_news: list[str] = Field(default_factory=list, max_length=12)
-    must_discuss_news: list[str] = Field(default_factory=list, max_length=8)
-
-
-class CampaignGoalDraftData(BaseModel):
-    goal: str
-    source: str = "template"
-
-
-class CampaignInjectRequest(BaseModel):
-    angle: str = Field(default="", max_length=500)
-    selected_news: list[str] = Field(default_factory=list, max_length=8)
-    line_count: int = Field(default=3, ge=2, le=5)
-    use_live_price: bool = True
-    model: str | None = Field(
-        default=None,
-        max_length=80,
-        description="OpenAI model override for inject burst",
-    )
-
-
-class CampaignInjectData(BaseModel):
-    job_id: int
-    injected_count: int
-    new_total_lines: int
-    lines: list[CampaignPlanLine] = Field(default_factory=list)
-    status: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -313,37 +360,16 @@ class CampaignJobCreateData(BaseModel):
     title: str = ""
 
 
-class CampaignModelPriceRow(BaseModel):
-    id: str
-    input_per_1m: float | None = None
-    output_per_1m: float | None = None
-    tier: str = "unknown"
-    tier_label: str = ""
-    note: str = ""
-    known: bool = False
-    cost_index: float | None = None
-    price_badge: str = ""
-
-
-class CampaignPlanCostEstimate(BaseModel):
-    model: str
-    batches_assumed: int | None = None
-    input_tokens_assumed: int | None = None
-    output_tokens_assumed: int | None = None
-    estimate_usd: float | None = None
-    note: str = ""
-
-
 class CampaignAiStatusData(BaseModel):
     ai_enabled: bool
     configured: bool
     model: str
-    models: list[str] = Field(default_factory=list)
-    model_catalog: list[CampaignModelPriceRow] = Field(default_factory=list)
-    plan_cost_estimates_150: list[CampaignPlanCostEstimate] = Field(
-        default_factory=list
+    models: list[str] = Field(
+        default_factory=list,
+        description="Default OPENAI_MODEL + optional OPENAI_MODELS suggestions",
     )
-    pricing_unit: str = "USD per 1M tokens (standard short context)"
-    pricing_source: str = "https://developers.openai.com/api/docs/pricing"
-    models_source: str = "env_or_catalog"
+    pricing_url: str = Field(
+        default="https://platform.openai.com/docs/pricing",
+        description="Official OpenAI pricing docs — UI links here; no hardcoded rates",
+    )
     message: str

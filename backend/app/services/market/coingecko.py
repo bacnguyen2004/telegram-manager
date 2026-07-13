@@ -17,9 +17,37 @@ from .news import NewsItem, fetch_news_24h_sync, news_to_dicts
 
 logger = logging.getLogger(__name__)
 
+# Majors + alts often named in crypto news (grounding so chat doesn't invent prices).
+COINGECKO_COIN_IDS: list[tuple[str, str]] = [
+    ("bitcoin", "BTC"),
+    ("ethereum", "ETH"),
+    ("solana", "SOL"),
+    ("binancecoin", "BNB"),
+    ("ripple", "XRP"),
+    ("dogecoin", "DOGE"),
+    ("cardano", "ADA"),
+    ("avalanche-2", "AVAX"),
+    ("chainlink", "LINK"),
+    ("polkadot", "DOT"),
+    ("the-open-network", "TON"),
+    ("tron", "TRX"),
+    ("polygon-ecosystem-token", "POL"),
+    ("near", "NEAR"),
+    ("aptos", "APT"),
+    ("sui", "SUI"),
+    ("arbitrum", "ARB"),
+    ("optimism", "OP"),
+    ("pepe", "PEPE"),
+    ("shiba-inu", "SHIB"),
+    ("uniswap", "UNI"),
+    ("litecoin", "LTC"),
+    ("bitcoin-cash", "BCH"),
+]
+
+_COINGECKO_IDS = ",".join(cid for cid, _ in COINGECKO_COIN_IDS)
 COINGECKO_SIMPLE_URL = (
     "https://api.coingecko.com/api/v3/simple/price"
-    "?ids=bitcoin,ethereum,solana&vs_currencies=usd&include_24hr_change=true"
+    f"?ids={_COINGECKO_IDS}&vs_currencies=usd&include_24hr_change=true"
 )
 
 _CACHE_TTL_SEC = 90.0
@@ -85,13 +113,8 @@ def _fetch_prices_sync() -> list[CoinQuote]:
         raise ValueError(f"CoinGecko network error: {exc.reason}") from exc
 
     data = json.loads(raw)
-    mapping = [
-        ("bitcoin", "BTC"),
-        ("ethereum", "ETH"),
-        ("solana", "SOL"),
-    ]
     coins: list[CoinQuote] = []
-    for coin_id, symbol in mapping:
+    for coin_id, symbol in COINGECKO_COIN_IDS:
         row = data.get(coin_id) or {}
         usd = row.get("usd")
         if usd is None:
@@ -133,7 +156,7 @@ def _fetch_sync(
     movers_source = ""
     movers_error: str | None = None
     try:
-        gainers, losers, movers_source = fetch_binance_movers_sync(top_n=5)
+        gainers, losers, movers_source = fetch_binance_movers_sync(top_n=8)
     except Exception as exc:
         movers_error = str(exc)
         logger.warning("Binance movers failed: %s", exc)
@@ -141,6 +164,8 @@ def _fetch_sync(
     now = datetime.now(timezone.utc).isoformat()
     notes = [
         "Gia tham khao luc snapshot; co the lech so voi san.",
+        "Majors + alts thuong gap trong news (BNB/XRP/DOGE/AVAX/LINK/…); dung so trong PRICES.",
+        "Neu news nhac coin co trong list — paraphrase + gia xap xi tu PRICES, khong bia so.",
         "Trong chat chi noi xap xi (around / near), khong can moi cau lap day du so.",
         "News la tieu de public RSS 24h — paraphrase, khong copy nguyen van.",
         "Top gainer/loser tu Binance 24h ticker (free) — chi gossip, khong shill.",
@@ -230,15 +255,26 @@ def format_market_brief(
         "Use ONLY these price figures. Do not invent other exact prices or % moves.",
         "In dialogue, approximate only: BTC around… / ETH near… (or VI: khoảng / gần / tầm).",
         "PRICE DISCIPLINE: each major level (e.g. BTC ~X) at most 2–3 times in the FULL plan.",
+        "Alts: only cite a listed alt when news/chat naturally hits it — do not tour every coin.",
         "Most messages should have NO exact price — react, disagree, life, meme, trade talk instead.",
         "",
-        "PRICES:",
+        "PRICES (majors + alts for news grounding):",
     ]
-    for coin in snapshot.coins:
+    majors = {"BTC", "ETH", "SOL"}
+    major_rows = [c for c in snapshot.coins if c.symbol in majors]
+    alt_rows = [c for c in snapshot.coins if c.symbol not in majors]
+    for coin in major_rows:
         lines.append(
             f"- {coin.symbol}: {format_price(coin.usd)} "
             f"(24h {format_change(coin.usd_24h_change)})"
         )
+    if alt_rows:
+        lines.append("ALTS (use if news mentions them; optional otherwise):")
+        for coin in alt_rows:
+            lines.append(
+                f"- {coin.symbol}: {format_price(coin.usd)} "
+                f"(24h {format_change(coin.usd_24h_change)})"
+            )
 
     gainers = list(snapshot.gainers or [])
     losers = list(snapshot.losers or [])

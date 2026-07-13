@@ -4,10 +4,6 @@ from fastapi import APIRouter, HTTPException, Query
 
 from ..schemas.campaign import (
     CampaignAiStatusData,
-    CampaignGoalDraftData,
-    CampaignGoalDraftRequest,
-    CampaignInjectData,
-    CampaignInjectRequest,
     CampaignJobCreateData,
     CampaignJobCreateRequest,
     CampaignJobData,
@@ -72,13 +68,6 @@ async def campaign_market_snapshot(
     return success_response(data.model_dump())
 
 
-@router.post("/goal-draft", response_model=ApiEnvelope[CampaignGoalDraftData])
-async def campaign_goal_draft(payload: CampaignGoalDraftRequest) -> dict:
-    """Deterministic goal paragraph from wizard fields (no LLM)."""
-    data = campaign_workflow.goal_draft(payload)
-    return success_response(data.model_dump())
-
-
 @router.post("/jobs", response_model=ApiEnvelope[CampaignJobCreateData])
 async def start_campaign_job(payload: CampaignJobCreateRequest) -> dict:
     try:
@@ -97,20 +86,6 @@ async def get_campaign_job(job_id: int) -> dict:
     return success_response(data.model_dump())
 
 
-@router.post("/jobs/{job_id}/inject", response_model=ApiEnvelope[CampaignInjectData])
-async def inject_campaign_job(job_id: int, payload: CampaignInjectRequest) -> dict:
-    """AI-generate 2–5 lines about live news/price and append to a running job."""
-    try:
-        data = await campaign_workflow.inject(job_id, payload)
-    except (
-        CampaignNotFoundError,
-        CampaignBadRequestError,
-        CampaignUpstreamError,
-    ) as exc:
-        raise _http_error(exc) from exc
-    return success_response(data.model_dump())
-
-
 @router.post("/jobs/{job_id}/stop", response_model=ApiEnvelope[CampaignJobData])
 async def stop_campaign_job(job_id: int) -> dict:
     try:
@@ -122,26 +97,13 @@ async def stop_campaign_job(job_id: int) -> dict:
 
 @router.post("/jobs/{job_id}/resume", response_model=ApiEnvelope[CampaignJobData])
 async def resume_campaign_job(job_id: int) -> dict:
-    """Continue a stopped / error campaign from remaining (non-success) lines."""
+    """Continue a stopped/error job from remaining pending/error lines."""
     try:
         data = campaign_workflow.resume_job(job_id)
     except (
         CampaignNotFoundError,
-        CampaignConflictError,
         CampaignBadRequestError,
+        CampaignConflictError,
     ) as exc:
-        raise _http_error(exc) from exc
-    return success_response(data.model_dump())
-
-
-@router.post(
-    "/jobs/{job_id}/lines/{line_id}/retry",
-    response_model=ApiEnvelope[CampaignJobData],
-)
-async def retry_campaign_line(job_id: int, line_id: int) -> dict:
-    """Retry a single failed/pending campaign line (e.g. after fixing acc permissions)."""
-    try:
-        data = campaign_workflow.retry_line(job_id, line_id)
-    except (CampaignNotFoundError, CampaignConflictError) as exc:
         raise _http_error(exc) from exc
     return success_response(data.model_dump())

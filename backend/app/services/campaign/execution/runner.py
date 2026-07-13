@@ -30,8 +30,19 @@ class CampaignRunner:
         return True
 
     def resume(self, job_id: int) -> bool:
+        """Continue after stop/error. Waits for previous run task to exit first."""
         job = campaign_job_store.prepare_resume(job_id)
         if job is None:
+            return False
+        # Stop marks DB stopped immediately, but asyncio task may still be in
+        # _active_jobs until finally:discard — wait so start() is not rejected.
+        deadline = time.time() + 15.0
+        while job_id in self._active_jobs and time.time() < deadline:
+            time.sleep(0.05)
+        if job_id in self._active_jobs:
+            logger.warning(
+                "resume blocked: job %s still active after stop timeout", job_id
+            )
             return False
         return self.start(job_id)
 
